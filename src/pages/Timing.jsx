@@ -99,10 +99,11 @@ export default function Timing() {
       )}
 
       {heat.status === 'pending' && runners.length > 0 && (
-        <div className="card stack center" style={{ marginTop: 24 }}>
+        <div className="card stack center" style={{ marginTop: 24, padding: 28 }}>
+          <div className="display" style={{ fontSize: 22 }}>{runners.length} on the line</div>
           <div className="muted">Mass start — tap when the gun goes.</div>
           <button className="btn primary lg block" onClick={() => startHeat(heatId)}>
-            ▶ START HEAT
+            ▶ Start heat
           </button>
         </div>
       )}

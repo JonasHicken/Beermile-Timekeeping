@@ -21,10 +21,9 @@ export default function Home() {
   return (
     <div className="app">
       <div className="topbar">
-        <img src="/icon.svg" width="34" height="34" alt="" style={{ borderRadius: 8 }} />
         <div>
-          <h1>Beermile Timekeeping</h1>
-          <div className="sub">Tap timing · live results · RFID-ready</div>
+          <h1>Beermile <span className="accent">Timekeeping</span></h1>
+          <div className="sub">Tap timing · Live results · RFID-ready</div>
         </div>
       </div>
 
@@ -65,7 +64,10 @@ export default function Home() {
       <div style={{ height: 20 }} />
 
       {events.length === 0 && !creating && (
-        <div className="empty">No events yet. Create one to build your start list.</div>
+        <div className="empty">
+          <div className="display">Race day starts here</div>
+          Create an event to build your start list.
+        </div>
       )}
 
       <div className="list">
@@ -84,11 +86,11 @@ function EventRow({ ev, onOpen, onLive, onDelete }) {
   const runners = useStore((s) => runnersInEvent(s, ev.id).length)
   const heats = useStore((s) => heatsInEvent(s, ev.id).length)
   return (
-    <div className="card stack">
+    <div className="event-card stack">
       <div className="row">
         <div className="grow" onClick={onOpen} style={{ cursor: 'pointer' }}>
-          <div style={{ fontWeight: 700, fontSize: 17 }}>{ev.name}</div>
-          <div className="muted tiny">
+          <div className="ev-name">{ev.name}</div>
+          <div className="ev-meta">
             {ev.date} · {ev.numLaps} laps · {runners} runners · {heats} heats
           </div>
         </div>

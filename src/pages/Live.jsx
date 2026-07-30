@@ -32,7 +32,10 @@ export default function Live() {
       </div>
 
       {finishers.length === 0 && inProgress.length === 0 && (
-        <div className="empty">No results yet. Start a heat to see live standings.</div>
+        <div className="empty">
+          <div className="display">No times yet</div>
+          Start a heat and standings appear here live.
+        </div>
       )}
 
       {finishers.length > 0 && (
@@ -49,7 +52,7 @@ export default function Live() {
               <tr key={r.runner.id}>
                 <td className="rank">{r.rank}</td>
                 <td>
-                  <div><strong>{r.runner.bib}</strong> {r.runner.name}</div>
+                  <div className="r-name"><strong>{r.runner.bib}</strong> {r.runner.name}</div>
                   <div className="splits">
                     {r.laps.map((l) => fmtShort(l.split)).join(' · ')}
                   </div>
