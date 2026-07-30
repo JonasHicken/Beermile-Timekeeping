@@ -1,21 +1,26 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
-  useStore, getEvent, getHeat, runnersInHeat, crossingsInHeat,
+  useStore, getEvent, getHeat, runnersInHeat, crossingsInHeat, heatsInEvent,
   startHeat, finishHeat, resetHeat, recordCrossing, undoLastCrossing,
+  requiredLaps, statusOf,
 } from '../lib/store.js'
 import { fmt } from '../lib/time.js'
+import RunnerSheet from '../components/RunnerSheet.jsx'
 
 export default function Timing() {
   const { eventId, heatId } = useParams()
   const nav = useNavigate()
   const event = useStore((s) => getEvent(s, eventId))
   const heat = useStore((s) => getHeat(s, heatId))
+  const heats = useStore((s) => heatsInEvent(s, eventId))
   const runners = useStore((s) => runnersInHeat(s, heatId))
   const crossings = useStore((s) => crossingsInHeat(s, heatId))
 
   const [flashId, setFlashId] = useState(null)
   const [toast, setToast] = useState(null)
+  const [sheetRunner, setSheetRunner] = useState(null)
+  const [hideFinished, setHideFinished] = useState(false)
   const wakeRef = useRef(null)
 
   const running = heat?.status === 'running'
@@ -49,10 +54,24 @@ export default function Timing() {
     )
   }
 
-  // lapsDone per runner
   const counts = {}
   for (const c of crossings) counts[c.runnerId] = (counts[c.runnerId] || 0) + 1
-  const finishedCount = runners.filter((r) => (counts[r.id] || 0) >= event.numLaps).length
+
+  const rows = runners.map((r) => {
+    const need = requiredLaps(event, r)
+    const done = counts[r.id] || 0
+    const st = statusOf(r)
+    return {
+      runner: r,
+      need,
+      done,
+      status: st,
+      finished: st === 'ok' && done >= need,
+      out: st !== 'ok',
+    }
+  })
+  const finishedCount = rows.filter((x) => x.finished).length
+  const visible = hideFinished ? rows.filter((x) => !x.finished && !x.out) : rows
 
   function showToast(msg) {
     setToast(msg)
@@ -60,23 +79,25 @@ export default function Timing() {
     showToast._t = setTimeout(() => setToast(null), 1400)
   }
 
-  function tap(runner) {
+  function tap(row) {
     if (!running) return
-    const done = counts[runner.id] || 0
-    if (done >= event.numLaps) { showToast(`${runner.bib} already finished`); return }
-    const c = recordCrossing(heatId, runner.id, 'tap')
+    if (row.out) { showToast(`${row.runner.bib} is ${row.status.toUpperCase()}`); return }
+    if (row.done >= row.need) { showToast(`${row.runner.bib} already finished`); return }
+    const c = recordCrossing(heatId, row.runner.id, 'tap')
     if (!c) return
-    setFlashId(runner.id)
-    setTimeout(() => setFlashId((id) => (id === runner.id ? null : id)), 220)
+    setFlashId(row.runner.id)
+    setTimeout(() => setFlashId((id) => (id === row.runner.id ? null : id)), 220)
     if (navigator.vibrate) navigator.vibrate(15)
-    const nowDone = done + 1
-    showToast(nowDone >= event.numLaps ? `${runner.bib} FINISHED` : `${runner.bib} · lap ${nowDone}`)
+    const nowDone = row.done + 1
+    showToast(nowDone >= row.need ? `${row.runner.bib} FINISHED` : `${row.runner.bib} · lap ${nowDone}`)
   }
 
   function undo() {
     const last = undoLastCrossing(heatId)
-    if (last) { showToast(`Undo ${last.bib} · lap ${last.lap}`); if (navigator.vibrate) navigator.vibrate([10, 40, 10]) }
-    else showToast('Nothing to undo')
+    if (last) {
+      showToast(`Undo ${last.bib} · lap ${last.lap}`)
+      if (navigator.vibrate) navigator.vibrate([10, 40, 10])
+    } else showToast('Nothing to undo')
   }
 
   return (
@@ -84,18 +105,38 @@ export default function Timing() {
       <div className="topbar">
         <Link to={`/event/${eventId}/setup`} className="backlink">← Setup</Link>
         <div className="spacer" />
+        <button className="btn ghost" onClick={() => nav(`/event/${eventId}/heat/${heatId}/review`)}>Review</button>
         <button className="btn ghost" onClick={() => nav(`/event/${eventId}/live`)}>Results</button>
       </div>
 
-      <div className="row" style={{ alignItems: 'baseline' }}>
-        <h1 style={{ margin: 0, fontSize: 22 }}>{heat.name}</h1>
-        <span className="muted">· {finishedCount}/{runners.length} done</span>
+      {/* heat switcher — jump between heats without going back to Setup */}
+      {heats.length > 1 && (
+        <div className="chips">
+          {heats.map((h) => (
+            <button
+              key={h.id}
+              className={`chip${h.id === heatId ? ' on' : ''}`}
+              onClick={() => nav(`/event/${eventId}/heat/${h.id}`)}
+            >
+              {h.name}
+              {h.status === 'running' && <span className="chip-dot" />}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div className="row" style={{ alignItems: 'baseline', marginTop: 4 }}>
+        <h1 style={{ margin: 0, fontSize: 26 }}>{heat.name}</h1>
+        <span className="muted tiny">{finishedCount}/{runners.length} done</span>
         <div className="spacer" />
         {running && <HeatClock startedAt={heat.startedAt} />}
       </div>
 
       {runners.length === 0 && (
-        <div className="empty">No runners in this heat. Assign some in Setup.</div>
+        <div className="empty">
+          <div className="display">Empty heat</div>
+          Assign runners to it in Setup.
+        </div>
       )}
 
       {heat.status === 'pending' && runners.length > 0 && (
@@ -110,31 +151,34 @@ export default function Timing() {
 
       {(running || heat.status === 'done') && (
         <>
-          <div className="grid" style={{ marginTop: 16 }}>
-            {runners.map((r) => {
-              const done = counts[r.id] || 0
-              const finished = done >= event.numLaps
-              return (
-                <RunnerTile
-                  key={r.id}
-                  runner={r}
-                  done={done}
-                  laps={event.numLaps}
-                  finished={finished}
-                  flash={flashId === r.id}
-                  elapsed={finished ? finishElapsed(crossings, r.id, event.numLaps, heat.startedAt) : null}
-                  disabled={!running}
-                  onTap={() => tap(r)}
-                />
-              )
-            })}
+          {finishedCount > 0 && (
+            <button className="toggle" onClick={() => setHideFinished((v) => !v)}>
+              <span className={`toggle-box${hideFinished ? ' on' : ''}`} />
+              Hide finished ({finishedCount})
+            </button>
+          )}
+
+          <div className="grid" style={{ marginTop: 14 }}>
+            {visible.map((row) => (
+              <RunnerTile
+                key={row.runner.id}
+                row={row}
+                flash={flashId === row.runner.id}
+                elapsed={row.finished ? finishElapsed(crossings, row.runner.id, row.need, heat.startedAt) : null}
+                disabled={!running}
+                onTap={() => tap(row)}
+                onDetail={() => setSheetRunner(row.runner.id)}
+              />
+            ))}
           </div>
 
           {running && (
             <div className="actionbar">
               <button className="btn danger grow lg" onClick={undo}>↶ Undo</button>
-              <button className="btn grow lg"
-                onClick={() => { if (confirm('Finish this heat? You can still review and edit results.')) finishHeat(heatId) }}>
+              <button
+                className="btn grow lg"
+                onClick={() => { if (confirm('Finish this heat? You can still review and correct it.')) finishHeat(heatId) }}
+              >
                 Finish heat
               </button>
             </div>
@@ -153,15 +197,24 @@ export default function Timing() {
         </>
       )}
 
+      {sheetRunner && (
+        <RunnerSheet
+          eventId={eventId}
+          heatId={heatId}
+          runnerId={sheetRunner}
+          onClose={() => setSheetRunner(null)}
+        />
+      )}
+
       {toast && <div className="toast">{toast}</div>}
     </div>
   )
 }
 
-function finishElapsed(crossings, runnerId, numLaps, startedAt) {
+function finishElapsed(crossings, runnerId, need, startedAt) {
   const cs = crossings.filter((c) => c.runnerId === runnerId).sort((a, b) => a.capturedAt - b.capturedAt)
-  if (cs.length < numLaps || startedAt == null) return null
-  return cs[numLaps - 1].capturedAt - startedAt
+  if (cs.length < need || startedAt == null) return null
+  return cs[need - 1].capturedAt - startedAt
 }
 
 function HeatClock({ startedAt }) {
@@ -170,26 +223,43 @@ function HeatClock({ startedAt }) {
     const t = setInterval(() => setNow(Date.now()), 100)
     return () => clearInterval(t)
   }, [])
-  return <span className="clock" style={{ fontSize: 22 }}>{fmt(now - startedAt)}</span>
+  return <span className="clock" style={{ fontSize: 26 }}>{fmt(now - startedAt)}</span>
 }
 
-function RunnerTile({ runner, done, laps, finished, flash, elapsed, disabled, onTap }) {
+function RunnerTile({ row, flash, elapsed, disabled, onTap, onDetail }) {
+  const { runner, need, done, finished, out, status } = row
   return (
-    <button
-      className={`tile${flash ? ' flash' : ''}${finished ? ' done' : ''}`}
+    <div
+      className={`tile${flash ? ' flash' : ''}${finished ? ' done' : ''}${out ? ' out' : ''}`}
       onClick={onTap}
-      disabled={disabled && !finished}
+      role="button"
+      tabIndex={disabled && !finished ? -1 : 0}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onTap() } }}
+      aria-disabled={disabled && !finished}
     >
-      {finished && <span className="t-time">{fmt(elapsed)}</span>}
-      <div>
-        <div className="t-bib">{runner.bib}</div>
-        <div className="t-name">{runner.name || ' '}</div>
+      <div className="row" style={{ alignItems: 'flex-start', gap: 6 }}>
+        <span className="t-bib grow">{runner.bib}</span>
+        <button
+          className="t-more"
+          onClick={(e) => { e.stopPropagation(); onDetail() }}
+          aria-label={`Options for ${runner.bib}`}
+        >
+          ⋯
+        </button>
       </div>
-      <div className="t-laps">
-        {Array.from({ length: laps }).map((_, i) => (
-          <span key={i} className={`lap-dot${i < done ? ' on' : ''}`} />
-        ))}
-      </div>
-    </button>
+      <div className="t-name">{runner.name || ' '}</div>
+
+      {out ? (
+        <div className="t-status">{status.toUpperCase()}</div>
+      ) : finished ? (
+        <div className="t-final">{fmt(elapsed)}</div>
+      ) : (
+        <div className="t-laps">
+          {Array.from({ length: need }).map((_, i) => (
+            <span key={i} className={`lap-dot${i < done ? ' on' : ''}`} />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }

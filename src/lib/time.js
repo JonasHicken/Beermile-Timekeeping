@@ -28,3 +28,18 @@ export function fmtShort(ms) {
 export function nowMs() {
   return Date.now()
 }
+
+// Parse "m:ss.d" / "m:ss" / "ss" back into milliseconds. Returns null if the
+// string isn't a usable time, so callers can reject the edit rather than
+// silently writing NaN into a crossing.
+export function parseElapsed(str) {
+  const t = String(str).trim()
+  if (!t) return null
+  const m = t.match(/^(?:(\d+):)?(\d{1,2})(?:[.,](\d{1,3}))?$/)
+  if (!m) return null
+  const mins = m[1] ? Number(m[1]) : 0
+  const secs = Number(m[2])
+  if (secs > 59 && m[1]) return null
+  const frac = m[3] ? Number(m[3].padEnd(3, '0')) : 0
+  return mins * 60000 + secs * 1000 + frac
+}

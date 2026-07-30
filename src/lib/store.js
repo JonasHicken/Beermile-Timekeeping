@@ -11,6 +11,10 @@
 // bridge later writes crossings with source:'rfid' into this exact shape and
 // every screen already understands them. Corrections set `void:true` rather
 // than deleting, so the log stays auditable and reconcilable against chip data.
+//
+// Lap ORDINALS are always derived from chronological order at read time, never
+// from the stored `lap` field — voiding a mid-race crossing must renumber the
+// ones after it. The stored `lap` records what it was at capture, for audit.
 // ---------------------------------------------------------------------------
 
 import { useSyncExternalStore } from 'react'
@@ -58,7 +62,7 @@ function getSnapshot() {
   return state
 }
 
-// Cross-tab / cross-device-tab sync: another tab writing the same key updates us.
+// Cross-tab sync: another tab writing the same key updates us.
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
     if (e.key === KEY) {
@@ -80,6 +84,23 @@ export function useStore(selector) {
   const snap = useSyncExternalStore(subscribe, getSnapshot)
   return selector(snap)
 }
+
+// ---- runner status ---------------------------------------------------------
+
+export const STATUSES = [
+  { key: 'ok', label: 'Racing' },
+  { key: 'dnf', label: 'DNF' },
+  { key: 'dns', label: 'DNS' },
+  { key: 'dq', label: 'DQ' },
+]
+
+export const statusOf = (r) => r?.status ?? 'ok'
+export const penaltyOf = (r) => r?.penaltyLaps ?? 0
+
+// A beer mile penalty lap (e.g. for vomiting) means this runner must complete
+// an extra lap, so their required count differs from the event default.
+export const requiredLaps = (event, runner) =>
+  (event?.numLaps ?? 4) + penaltyOf(runner)
 
 // ---- selectors (pure) ------------------------------------------------------
 
@@ -103,9 +124,17 @@ export const heatsInEvent = (s, eventId) =>
 
 export const getHeat = (s, id) => s.heats.find((h) => h.id === id) || null
 
+export const getRunner = (s, id) => s.runners.find((r) => r.id === id) || null
+
 export const crossingsInHeat = (s, heatId) =>
   s.crossings
     .filter((c) => c.heatId === heatId && !c.void)
+    .sort((a, b) => a.capturedAt - b.capturedAt)
+
+// Includes voided rows — for the review log, where they show struck through.
+export const allCrossingsInHeat = (s, heatId) =>
+  s.crossings
+    .filter((c) => c.heatId === heatId)
     .sort((a, b) => a.capturedAt - b.capturedAt)
 
 export const crossingsForRunner = (s, heatId, runnerId) =>
@@ -122,18 +151,22 @@ function bibNum(b) {
 // Per-runner computed result within their heat.
 export function runnerResult(s, event, heat, runner) {
   const cs = crossingsForRunner(s, heat.id, runner.id)
+  const need = requiredLaps(event, runner)
   const laps = []
   let prev = heat.startedAt
   for (const c of cs) {
-    if (prev != null) laps.push({ lap: laps.length + 1, at: c.capturedAt, split: c.capturedAt - prev })
+    if (prev != null) laps.push({ id: c.id, lap: laps.length + 1, at: c.capturedAt, split: c.capturedAt - prev })
     prev = c.capturedAt
   }
-  const finished = cs.length >= event.numLaps
-  const finishAt = finished ? cs[event.numLaps - 1].capturedAt : null
+  const status = statusOf(runner)
+  const finished = status === 'ok' && cs.length >= need
+  const finishAt = finished ? cs[need - 1].capturedAt : null
   const elapsed = finished && heat.startedAt != null ? finishAt - heat.startedAt : null
   return {
     runner,
     heat,
+    status,
+    requiredLaps: need,
     lapsDone: cs.length,
     laps,
     finished,
@@ -142,30 +175,36 @@ export function runnerResult(s, event, heat, runner) {
   }
 }
 
-// Full event standings: finishers ranked by elapsed, then in-progress runners.
+// Full event standings: finishers ranked by elapsed, then in-progress, then
+// non-finishers (DNF/DNS/DQ), then not started.
 export function standings(s, eventId) {
   const event = getEvent(s, eventId)
-  if (!event) return { finishers: [], inProgress: [], notStarted: [] }
+  if (!event) return { finishers: [], inProgress: [], didNotFinish: [], notStarted: [] }
   const heats = heatsInEvent(s, eventId)
   const heatById = Object.fromEntries(heats.map((h) => [h.id, h]))
-  const rows = runnersInEvent(s, eventId)
-    .map((r) => {
-      const heat = r.heatId ? heatById[r.heatId] : null
-      if (!heat) return { runner: r, heat: null, lapsDone: 0, laps: [], finished: false, elapsed: null }
-      return runnerResult(s, event, heat, r)
-    })
+  const rows = runnersInEvent(s, eventId).map((r) => {
+    const heat = r.heatId ? heatById[r.heatId] : null
+    if (!heat) {
+      return {
+        runner: r, heat: null, status: statusOf(r), requiredLaps: requiredLaps(event, r),
+        lapsDone: 0, laps: [], finished: false, elapsed: null,
+      }
+    }
+    return runnerResult(s, event, heat, r)
+  })
 
   const finishers = rows
     .filter((r) => r.finished)
     .sort((a, b) => a.elapsed - b.elapsed)
     .map((r, i) => ({ ...r, rank: i + 1 }))
+  const didNotFinish = rows.filter((r) => r.status !== 'ok')
   const inProgress = rows
-    .filter((r) => !r.finished && r.heat?.startedAt != null && r.lapsDone > 0)
+    .filter((r) => r.status === 'ok' && !r.finished && r.heat?.startedAt != null && r.lapsDone > 0)
     .sort((a, b) => b.lapsDone - a.lapsDone)
   const notStarted = rows.filter(
-    (r) => !r.finished && (r.heat?.startedAt == null || r.lapsDone === 0),
+    (r) => r.status === 'ok' && !r.finished && (r.heat?.startedAt == null || r.lapsDone === 0),
   )
-  return { event, finishers, inProgress, notStarted }
+  return { event, finishers, inProgress, didNotFinish, notStarted }
 }
 
 // ---- mutations -------------------------------------------------------------
@@ -199,16 +238,20 @@ export function deleteEvent(id) {
   })
 }
 
-export function addRunner(eventId, { bib, name, category = '' }) {
-  const r = {
-    id: uid(),
-    eventId,
-    bib: String(bib).trim(),
-    name: name.trim(),
-    category: category.trim(),
-    heatId: null,
-    epc: null, // reserved for RFID tag mapping
-  }
+const newRunner = (eventId, { bib, name, category = '' }) => ({
+  id: uid(),
+  eventId,
+  bib: String(bib).trim(),
+  name: (name || '').trim(),
+  category: (category || '').trim(),
+  heatId: null,
+  status: 'ok',
+  penaltyLaps: 0,
+  epc: null, // reserved for RFID tag mapping
+})
+
+export function addRunner(eventId, fields) {
+  const r = newRunner(eventId, fields)
   commit({ ...state, runners: [...state.runners, r] })
   return r
 }
@@ -218,6 +261,14 @@ export function updateRunner(id, patch) {
     ...state,
     runners: state.runners.map((r) => (r.id === id ? { ...r, ...patch } : r)),
   })
+}
+
+export function setRunnerStatus(id, status) {
+  updateRunner(id, { status })
+}
+
+export function setPenaltyLaps(id, n) {
+  updateRunner(id, { penaltyLaps: Math.max(0, Math.min(9, n)) })
 }
 
 export function removeRunner(id) {
@@ -235,7 +286,7 @@ export function importRunners(eventId, text) {
   for (const line of text.split('\n')) {
     const t = line.trim()
     if (!t) continue
-    let bib, name, category = ''
+    let bib, name = '', category = ''
     if (t.includes(',')) {
       const parts = t.split(',').map((x) => x.trim())
       bib = parts[0]
@@ -243,10 +294,10 @@ export function importRunners(eventId, text) {
       category = parts[2] || ''
     } else {
       const m = t.match(/^(\S+)\s+(.*)$/)
-      if (m) { bib = m[1]; name = m[2] } else { bib = t; name = '' }
+      if (m) { bib = m[1]; name = m[2] } else { bib = t }
     }
     if (!bib) continue
-    const r = { id: uid(), eventId, bib, name, category, heatId: null, epc: null }
+    const r = newRunner(eventId, { bib, name, category })
     next.push(r)
     added.push(r)
   }
@@ -288,12 +339,11 @@ export function assignRunner(runnerId, heatId) {
   updateRunner(runnerId, { heatId })
 }
 
-// Split all unassigned (or all) runners into heats of `size`, in bib order.
+// Split all runners into heats of `size`, in bib order.
 export function autoSplitHeats(eventId, size = 12) {
   const runners = runnersInEvent(state, eventId)
   const heatCount = Math.max(1, Math.ceil(runners.length / size))
-  // fresh heats
-  let heats = state.heats.filter((h) => h.eventId !== eventId)
+  const heats = state.heats.filter((h) => h.eventId !== eventId)
   const newHeats = []
   for (let i = 0; i < heatCount; i++) {
     newHeats.push({
@@ -307,8 +357,7 @@ export function autoSplitHeats(eventId, size = 12) {
   }
   const assignment = {}
   runners.forEach((r, i) => {
-    const h = newHeats[Math.floor(i / size)]
-    assignment[r.id] = h.id
+    assignment[r.id] = newHeats[Math.floor(i / size)].id
   })
   commit({
     ...state,
@@ -316,7 +365,6 @@ export function autoSplitHeats(eventId, size = 12) {
     runners: state.runners.map((r) =>
       r.eventId === eventId ? { ...r, heatId: assignment[r.id] ?? null } : r,
     ),
-    // clear crossings for this event's old heats (fresh split)
     crossings: state.crossings.filter((c) => c.eventId !== eventId),
   })
   return newHeats
@@ -340,16 +388,14 @@ export function resetHeat(heatId) {
   })
 }
 
-// Record a crossing for a runner. Auto-computes the next lap from how many
-// non-void crossings the runner already has. Returns the crossing, or null if
-// the runner has already completed all laps.
+// Record a crossing. Auto-computes the next lap from how many non-void
+// crossings the runner already has. Returns null if they've completed all laps.
 export function recordCrossing(heatId, runnerId, source = 'tap', at = nowMs()) {
-  const event = state.events.find((e) =>
-    state.heats.some((h) => h.id === heatId && h.eventId === e.id),
-  )
-  const done = lapCount(state, heatId, runnerId)
-  if (event && done >= event.numLaps) return null
+  const heat = state.heats.find((h) => h.id === heatId)
+  const event = state.events.find((e) => e.id === heat?.eventId)
   const runner = state.runners.find((r) => r.id === runnerId)
+  const done = lapCount(state, heatId, runnerId)
+  if (event && done >= requiredLaps(event, runner)) return null
   const c = {
     id: uid(),
     eventId: event?.id ?? null,
@@ -366,7 +412,7 @@ export function recordCrossing(heatId, runnerId, source = 'tap', at = nowMs()) {
   return c
 }
 
-// Undo the most recent non-void crossing in a heat (or for a specific runner).
+// Undo the most recent non-void crossing in a heat (or for one runner).
 export function undoLastCrossing(heatId, runnerId = null) {
   const pool = state.crossings
     .filter((c) => c.heatId === heatId && !c.void && (!runnerId || c.runnerId === runnerId))
@@ -378,6 +424,35 @@ export function undoLastCrossing(heatId, runnerId = null) {
     crossings: state.crossings.map((c) => (c.id === last.id ? { ...c, void: true } : c)),
   })
   return last
+}
+
+// ---- targeted corrections (the review screen) ------------------------------
+
+export function setCrossingVoid(id, isVoid) {
+  commit({
+    ...state,
+    crossings: state.crossings.map((c) => (c.id === id ? { ...c, void: isVoid } : c)),
+  })
+}
+
+// Fix a mistap: move this crossing to a different runner.
+export function reassignCrossing(id, runnerId) {
+  const runner = state.runners.find((r) => r.id === runnerId)
+  commit({
+    ...state,
+    crossings: state.crossings.map((c) =>
+      c.id === id ? { ...c, runnerId, bib: runner?.bib ?? null, source: 'manual' } : c,
+    ),
+  })
+}
+
+export function setCrossingTime(id, capturedAt) {
+  commit({
+    ...state,
+    crossings: state.crossings.map((c) =>
+      c.id === id ? { ...c, capturedAt, source: 'manual' } : c,
+    ),
+  })
 }
 
 export function exportEvent(eventId) {
