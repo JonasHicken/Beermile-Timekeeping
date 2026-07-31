@@ -87,7 +87,12 @@ input:focus, select:focus, textarea:focus {
   max-width: 900px;
   margin: 0 auto;
   min-height: 100%;
-  padding: max(20px, env(safe-area-inset-top)) 20px calc(24px + env(safe-area-inset-bottom));
+  /* Horizontal insets matter in landscape: the notch/Dynamic Island eats into
+     the left or right edge depending on which way the phone is turned. */
+  padding-top: max(20px, env(safe-area-inset-top));
+  padding-right: max(20px, env(safe-area-inset-right));
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  padding-left: max(20px, env(safe-area-inset-left));
   display: flex;
   flex-direction: column;
 }
@@ -561,6 +566,50 @@ input:focus, select:focus, textarea:focus {
 }
 .src-rfid { background: var(--amber-soft); color: var(--amber); }
 .src-manual { background: var(--green-soft); color: var(--green); }
+
+/* ---- landscape phones ----
+   A phone on its side is only ~390px tall. At the default sizes the header
+   chrome ate 60% of that and pushed every tile below the fold — unusable for
+   timing, where seeing the grid is the whole job. Compact the chrome and the
+   tiles so runners are visible immediately. Scoped by height, so iPad
+   landscape (768px tall) keeps the roomier layout. */
+@media (max-height: 500px) and (orientation: landscape) {
+  :root { --tap: 68px; }
+
+  .app { padding-top: max(8px, env(safe-area-inset-top)); }
+
+  .topbar { padding: 0 0 8px; }
+  .topbar h1 { font-size: 20px; }
+  .topbar .sub { font-size: 12px; letter-spacing: 0.1em; margin-top: 1px; }
+
+  .btn { min-height: 40px; padding: 8px 16px; font-size: 15px; }
+  .btn.lg { min-height: 46px; font-size: 16px; }
+  .backlink { padding: 4px; font-size: 15px; }
+
+  .chips { padding: 0 0 8px; }
+  .chip { padding: 6px 13px; font-size: 14px; }
+
+  .toggle { padding: 2px; font-size: 13px; }
+
+  h1 { font-size: 20px !important; }
+  .clock { font-size: 20px !important; }
+
+  .grid { gap: 8px; margin-top: 8px !important; }
+  .tile { padding: 10px; }
+  .tile .t-bib { font-size: 24px; }
+  .tile .t-name { font-size: 12px; margin-top: 2px; }
+  .tile .t-laps { margin-top: 7px; }
+  .tile .t-final { font-size: 17px; margin-top: 6px; }
+
+  .actionbar { margin-top: 8px; padding: 8px 0 max(6px, env(safe-area-inset-bottom)); }
+
+  .card { padding: 14px; }
+  .empty { padding: 24px 16px; }
+
+  /* The sheet is fixed-height content in a short window — let it scroll. */
+  .sheet { max-height: 94vh; padding-top: 6px; }
+  .sheet-grip { margin-bottom: 8px; }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .tile, .btn, .sheet, .sheet-backdrop { transition: none; animation: none; }

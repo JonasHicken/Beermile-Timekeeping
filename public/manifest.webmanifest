@@ -4,7 +4,7 @@
   "description": "Hands-free-ish race timing for beer miles: tap timing, live results, RFID-ready.",
   "start_url": "/",
   "display": "standalone",
-  "orientation": "portrait",
+  "orientation": "any",
   "background_color": "#131211",
   "theme_color": "#131211",
   "icons": [
