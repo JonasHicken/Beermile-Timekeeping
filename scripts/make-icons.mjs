@@ -33,17 +33,26 @@ const root = path.join(__dirname, '..')
 const pub = path.join(root, 'public')
 
 const BG = '#131211'        // app canvas colour
-const WHITE = 236           // >= this on all channels counts as background
+// >= this on ALL channels counts as background. Deliberately permissive: the
+// source is a JPEG, so the sticker's die-cut shadow and compression ringing
+// leave a band of off-white around the figure. Too strict a value stops the
+// flood fill at that band and leaves a grey halo, which is glaring on a dark
+// canvas. Being permissive also removes the original white keyline — which is
+// fine, addKeyline() draws a clean one back. Safe for the art itself because
+// every channel must be high, and the tan/navy/rust palette never is.
+const WHITE = Number(process.env.WHITE_THRESHOLD ?? 200)
 const PAD_RATIO = 0.06      // breathing room inside the icon square
 const OUTLINE = '#f4efe6'   // rebuilt keyline colour (app's paper white)
 const OUTLINE_RATIO = 0.018 // keyline width as a fraction of the art's longest side
 
 const src = process.argv[2]
   ? path.resolve(process.argv[2])
-  : path.join(pub, 'logo-source.png')
+  : ['logo-source.png', 'logo-source.jpg', 'logo-source.jpeg']
+      .map((f) => path.join(pub, f))
+      .find(existsSync)
 
-if (!existsSync(src)) {
-  console.error(`\nSource image not found:\n  ${src}\n`)
+if (!src || !existsSync(src)) {
+  console.error(`\nSource image not found: ${pub}/logo-source.{png,jpg}\n`)
   console.error('Save the logo there (or pass a path) and re-run.\n')
   process.exit(1)
 }

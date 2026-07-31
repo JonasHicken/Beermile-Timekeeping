@@ -104,6 +104,12 @@ input:focus, select:focus, textarea:focus {
   gap: 12px;
   padding: 4px 0 22px;
 }
+.topbar .mark {
+  width: 60px;
+  height: 56px;
+  object-fit: contain;
+  flex: none;
+}
 .topbar h1 { font-size: 26px; margin: 0; }
 .topbar h1 .accent { color: var(--amber); }
 .topbar .sub {
