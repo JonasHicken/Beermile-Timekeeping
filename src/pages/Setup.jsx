@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   useStore, getEvent, runnersInEvent, heatsInEvent, runnersInHeat,
-  addRunner, removeRunner, importRunners, updateEvent,
+  addRunner, removeRunner, updateRunner, importRunners, updateEvent,
   autoSplitHeats, createHeat, updateHeat, deleteHeat, assignRunner, crossingsInHeat,
 } from '../lib/store.js'
 
@@ -18,6 +18,10 @@ export default function Setup() {
   const [showImport, setShowImport] = useState(false)
   const [importText, setImportText] = useState('')
   const [heatSize, setHeatSize] = useState(12)
+  // The list is sorted by bib, so editing one re-sorts on every keystroke and
+  // the row leaps down the page mid-edit (2 -> 25 moved it eight places). Hold
+  // the order still while a bib field has focus, and re-sort once it's done.
+  const [frozenIds, setFrozenIds] = useState(null)
 
   if (!event) {
     return (
@@ -29,6 +33,14 @@ export default function Setup() {
   }
 
   const assignedCount = runners.filter((r) => r.heatId).length
+
+  // Frozen order, with any runner added meanwhile appended rather than dropped.
+  const displayRunners = frozenIds
+    ? [
+        ...frozenIds.map((id) => runners.find((r) => r.id === id)).filter(Boolean),
+        ...runners.filter((r) => !frozenIds.includes(r.id)),
+      ]
+    : runners
 
   function quickAdd(e) {
     e.preventDefault()
@@ -107,10 +119,26 @@ export default function Setup() {
       )}
 
       <div className="list" style={{ marginTop: 14 }}>
-        {runners.map((r) => (
+        {displayRunners.map((r) => (
           <div className="item" key={r.id}>
-            <span className="bib">{r.bib}</span>
-            <span className="name grow">{r.name || <span className="muted">—</span>}</span>
+            {/* Bib and name are editable in place — fixing a typo shouldn't mean
+                deleting the runner and re-adding them. */}
+            <input
+              className="bib-edit"
+              value={r.bib}
+              onChange={(e) => updateRunner(r.id, { bib: e.target.value })}
+              onFocus={() => setFrozenIds(displayRunners.map((x) => x.id))}
+              onBlur={() => setFrozenIds(null)}
+              inputMode="numeric"
+              aria-label={`Bib for ${r.name || 'runner'}`}
+            />
+            <input
+              className="name-edit grow"
+              value={r.name}
+              onChange={(e) => updateRunner(r.id, { name: e.target.value })}
+              placeholder="Name"
+              aria-label={`Name for bib ${r.bib}`}
+            />
             {/* The heat is editable right here — picking one moves the runner.
                 Previously this was read-only text, so an empty heat could never
                 be filled and the only way to assign was a full re-split. */}

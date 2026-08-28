@@ -233,6 +233,45 @@ input:focus, select:focus, textarea:focus {
 }
 .item .name { font-weight: 500; font-size: 18px; }
 
+/* ---- inline-editable start list rows ---- */
+/* Quiet by default: a dashed underline hints "field" without turning a
+   100-row start list into a wall of boxes. Commits to a full amber box on
+   focus. */
+.bib-edit,
+.name-edit {
+  background: transparent;
+  border: 1px solid transparent;
+  border-bottom-color: var(--line-strong);
+  border-bottom-style: dashed;
+  border-radius: 7px;
+  padding: 6px 8px;
+  margin: -6px 0;
+}
+.bib-edit:hover,
+.name-edit:hover { border-bottom-color: var(--muted); }
+.bib-edit:focus,
+.name-edit:focus {
+  border-color: var(--amber);
+  border-style: solid;
+  background: var(--bg-2);
+  box-shadow: none;
+}
+
+.bib-edit {
+  width: 62px;
+  flex: none;
+  font-family: var(--display);
+  font-size: 20px;
+  color: var(--amber);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+}
+.name-edit {
+  font-size: 18px;
+  font-weight: 500;
+  min-width: 0;
+}
+
 /* ---- heat assignment (setup) ---- */
 /* Reads like the status pill it replaced, but it's a real control — the point
    is that assigning a runner to a heat is obviously possible from the list. */
