@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   useStore, getEvent, runnersInEvent, heatsInEvent, runnersInHeat,
   addRunner, removeRunner, importRunners, updateEvent,
-  autoSplitHeats, createHeat, assignRunner, lapCount, crossingsInHeat,
+  autoSplitHeats, createHeat, updateHeat, deleteHeat, assignRunner, crossingsInHeat,
 } from '../lib/store.js'
 
 export default function Setup() {
@@ -111,9 +111,20 @@ export default function Setup() {
           <div className="item" key={r.id}>
             <span className="bib">{r.bib}</span>
             <span className="name grow">{r.name || <span className="muted">—</span>}</span>
-            {r.heatId
-              ? <span className="pill">{heats.find((h) => h.id === r.heatId)?.name}</span>
-              : <span className="pill setup">unassigned</span>}
+            {/* The heat is editable right here — picking one moves the runner.
+                Previously this was read-only text, so an empty heat could never
+                be filled and the only way to assign was a full re-split. */}
+            <select
+              className={`heat-select${r.heatId ? '' : ' unassigned'}`}
+              value={r.heatId ?? ''}
+              onChange={(e) => assignRunner(r.id, e.target.value || null)}
+              aria-label={`Heat for bib ${r.bib}`}
+            >
+              <option value="">Unassigned</option>
+              {heats.map((h) => (
+                <option key={h.id} value={h.id}>{h.name}</option>
+              ))}
+            </select>
             <button className="btn ghost danger" onClick={() => removeRunner(r.id)} aria-label="Remove">✕</button>
           </div>
         ))}
@@ -122,7 +133,8 @@ export default function Setup() {
       {/* --- Heats --- */}
       <h2 style={{ marginTop: 28, marginBottom: 4, fontSize: 16 }}>Heats</h2>
       <p className="muted tiny" style={{ marginTop: 0 }}>
-        {assignedCount}/{runners.length} runners assigned. Split into heats to keep each screen tap-able.
+        {assignedCount}/{runners.length} runners assigned. Auto-split fills heats in bib
+        order, or set each runner’s heat in the start list above. Tap a heat’s name to rename it.
       </p>
 
       <div className="row wrap" style={{ marginBottom: 12 }}>
@@ -144,7 +156,13 @@ export default function Setup() {
             onTime={() => nav(`/event/${eventId}/heat/${h.id}`)} />
         ))}
       </div>
-      {heats.length === 0 && <div className="empty">No heats yet. Add runners, then Auto-split.</div>}
+      {heats.length === 0 && (
+        <div className="empty">
+          <div className="display">No heats yet</div>
+          Auto-split to create them automatically, or add an empty heat and assign
+          runners to it from the start list.
+        </div>
+      )}
 
       <div style={{ height: 24 }} />
     </div>
@@ -158,15 +176,38 @@ function HeatCard({ eventId, heat, runners, onTime }) {
   return (
     <div className="card stack">
       <div className="row">
-        <div className="grow">
-          <div style={{ fontWeight: 700 }}>{heat.name}</div>
-          <div className="muted tiny">{inHeat.length} runners · {crossings} crossings</div>
-        </div>
+        <input
+          className="heat-name grow"
+          value={heat.name}
+          onChange={(e) => updateHeat(heat.id, { name: e.target.value })}
+          aria-label="Heat name"
+        />
         <span className={`pill ${state}`}>{heat.status}</span>
       </div>
-      <button className="btn primary block" onClick={onTime}>
+      <div className="muted tiny" style={{ marginTop: -4 }}>
+        {inHeat.length === 0
+          ? 'No runners yet — assign them in the start list above.'
+          : `${inHeat.length} runners · ${crossings} crossings`}
+      </div>
+      {inHeat.length > 0 && (
+        <div className="heat-bibs">{inHeat.map((r) => r.bib).join(' · ')}</div>
+      )}
+      <button className="btn primary block" onClick={onTime} disabled={inHeat.length === 0}>
         {heat.status === 'pending' ? 'Open timing' : heat.status === 'running' ? 'Resume timing' : 'Review timing'}
       </button>
+      {/* Deliberately low-weight: destructive, and sits on every heat card. */}
+      <div className="row" style={{ justifyContent: 'flex-end' }}>
+        <button
+          className="btn ghost danger sm"
+          onClick={() => {
+            if (confirm(`Delete "${heat.name}"? Its runners become unassigned and any timing for it is cleared.`)) {
+              deleteHeat(heat.id)
+            }
+          }}
+        >
+          Delete heat
+        </button>
+      </div>
     </div>
   )
 }

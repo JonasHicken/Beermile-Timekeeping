@@ -160,6 +160,7 @@ input:focus, select:focus, textarea:focus {
 .btn.danger { color: var(--red); border-color: transparent; background: transparent; }
 .btn.danger:hover { background: var(--red-soft); color: var(--red); border-color: transparent; }
 .btn.block { width: 100%; }
+.btn.sm { min-height: 36px; padding: 6px 12px; font-size: 13px; }
 .btn.lg { min-height: 62px; font-size: 19px; }
 .btn:disabled { opacity: 0.4; pointer-events: none; }
 
@@ -231,6 +232,53 @@ input:focus, select:focus, textarea:focus {
   color: var(--amber);
 }
 .item .name { font-weight: 500; font-size: 18px; }
+
+/* ---- heat assignment (setup) ---- */
+/* Reads like the status pill it replaced, but it's a real control — the point
+   is that assigning a runner to a heat is obviously possible from the list. */
+.heat-select {
+  width: auto;
+  min-width: 112px;
+  flex: none;
+  padding: 8px 10px;
+  font-size: 14px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 999px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-strong);
+  color: var(--text);
+}
+.heat-select.unassigned { color: var(--muted); }
+
+/* Looks like the heading it is until you touch it, then obviously an input. */
+.heat-name {
+  font-family: var(--display);
+  font-size: 20px;
+  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  background: transparent;
+  border: 1px dashed var(--line-strong);
+  border-radius: 8px;
+  padding: 5px 9px;
+  margin-left: -9px;
+  width: auto;
+}
+.heat-name:hover { border-color: var(--muted); }
+.heat-name:focus {
+  border-style: solid;
+  border-color: var(--amber);
+  background: var(--bg-2);
+}
+
+.heat-bibs {
+  font-size: 14px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+  word-break: break-word;
+}
 
 /* ---- event cards (home) ---- */
 .event-card {
