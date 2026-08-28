@@ -4,11 +4,13 @@ import {
   useStore, listEvents, createEvent, deleteEvent,
   runnersInEvent, heatsInEvent,
 } from '../lib/store.js'
+import { useConfirm } from '../components/Confirm.jsx'
 
 export default function Home() {
   const events = useStore((s) => listEvents(s))
   const nav = useNavigate()
   const [creating, setCreating] = useState(false)
+  const [confirmNode, askConfirm] = useConfirm()
   const [name, setName] = useState('')
   const [laps, setLaps] = useState(4)
 
@@ -75,10 +77,17 @@ export default function Home() {
         {events.map((ev) => (
           <EventRow key={ev.id} ev={ev} onOpen={() => nav(`/event/${ev.id}/setup`)}
             onLive={() => nav(`/event/${ev.id}/live`)}
-            onDelete={() => { if (confirm(`Delete "${ev.name}" and all its data?`)) deleteEvent(ev.id) }}
+            onDelete={() => askConfirm({
+              title: `Delete ${ev.name}?`,
+              body: 'Removes the event, its start list, heats and every recorded time. This cannot be undone.',
+              confirmLabel: 'Delete event',
+              danger: true,
+              onConfirm: () => deleteEvent(ev.id),
+            })}
           />
         ))}
       </div>
+      {confirmNode}
     </div>
   )
 }

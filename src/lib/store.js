@@ -378,6 +378,13 @@ export function finishHeat(heatId) {
   updateHeat(heatId, { status: 'done' })
 }
 
+// Undo a finish. Keeps the start time and every crossing — the counterpart to
+// resetHeat(), which throws the timing away. Without this, finishing a heat by
+// mistake could only be undone by destroying the heat's data.
+export function reopenHeat(heatId) {
+  updateHeat(heatId, { status: 'running' })
+}
+
 export function resetHeat(heatId) {
   commit({
     ...state,

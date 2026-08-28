@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   useStore, getEvent, getHeat, runnersInHeat, crossingsInHeat, heatsInEvent,
-  startHeat, finishHeat, resetHeat, recordCrossing, undoLastCrossing,
+  startHeat, finishHeat, reopenHeat, resetHeat, recordCrossing, undoLastCrossing,
   requiredLaps, statusOf,
 } from '../lib/store.js'
 import { fmt } from '../lib/time.js'
 import RunnerSheet from '../components/RunnerSheet.jsx'
+import { useConfirm } from '../components/Confirm.jsx'
 
 export default function Timing() {
   const { eventId, heatId } = useParams()
@@ -21,6 +22,7 @@ export default function Timing() {
   const [toast, setToast] = useState(null)
   const [sheetRunner, setSheetRunner] = useState(null)
   const [hideFinished, setHideFinished] = useState(false)
+  const [confirmNode, askConfirm] = useConfirm()
   const wakeRef = useRef(null)
 
   const running = heat?.status === 'running'
@@ -177,7 +179,14 @@ export default function Timing() {
               <button className="btn danger grow lg" onClick={undo}>↶ Undo</button>
               <button
                 className="btn grow lg"
-                onClick={() => { if (confirm('Finish this heat? You can still review and correct it.')) finishHeat(heatId) }}
+                onClick={() =>
+                  askConfirm({
+                    title: 'Finish this heat?',
+                    body: 'Timing stops. You can still review and correct it, or reopen the heat.',
+                    confirmLabel: 'Finish',
+                    onConfirm: () => finishHeat(heatId),
+                  })
+                }
               >
                 Finish heat
               </button>
@@ -186,11 +195,26 @@ export default function Timing() {
 
           {heat.status === 'done' && (
             <div className="actionbar">
-              <button className="btn ghost grow" onClick={() => { if (confirm('Reset this heat? Clears all timing for it.')) resetHeat(heatId) }}>
-                Reset heat
+              {/* Reopen keeps every crossing; Reset is the destructive one. */}
+              <button className="btn grow" onClick={() => reopenHeat(heatId)}>
+                Reopen
+              </button>
+              <button
+                className="btn ghost danger"
+                onClick={() =>
+                  askConfirm({
+                    title: `Reset ${heat.name}?`,
+                    body: 'Deletes every crossing recorded in this heat and returns it to the start line. This cannot be undone.',
+                    confirmLabel: 'Reset heat',
+                    danger: true,
+                    onConfirm: () => resetHeat(heatId),
+                  })
+                }
+              >
+                Reset
               </button>
               <button className="btn primary grow" onClick={() => nav(`/event/${eventId}/live`)}>
-                View results
+                Results
               </button>
             </div>
           )}
@@ -206,6 +230,7 @@ export default function Timing() {
         />
       )}
 
+      {confirmNode}
       {toast && <div className="toast">{toast}</div>}
     </div>
   )

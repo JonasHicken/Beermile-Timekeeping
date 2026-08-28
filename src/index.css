@@ -161,6 +161,20 @@ input:focus, select:focus, textarea:focus {
 .btn.danger:hover { background: var(--red-soft); color: var(--red); border-color: transparent; }
 .btn.block { width: 100%; }
 .btn.sm { min-height: 36px; padding: 6px 12px; font-size: 13px; }
+/* Filled red, for the confirm action of a destructive dialog only — the
+   ghost .danger style is for the trigger, this is for the point of no return. */
+.btn.danger-solid {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+}
+.btn.danger-solid:hover { background: #c9573f; border-color: #c9573f; color: #fff; }
+
+.form-error {
+  color: var(--red);
+  font-size: 15px;
+  padding: 2px 2px 0;
+}
 .btn.lg { min-height: 62px; font-size: 19px; }
 .btn:disabled { opacity: 0.4; pointer-events: none; }
 
@@ -612,6 +626,9 @@ input:focus, select:focus, textarea:focus {
     border: 1px solid var(--line-strong);
   }
 }
+/* A confirmation has no drag affordance, so it doesn't get the grip's spacing. */
+.sheet.confirm { padding-top: 22px; }
+
 .sheet-grip {
   width: 40px;
   height: 4px;

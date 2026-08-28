@@ -5,6 +5,7 @@ import {
   addRunner, removeRunner, updateRunner, importRunners, updateEvent,
   autoSplitHeats, createHeat, updateHeat, deleteHeat, assignRunner, crossingsInHeat,
 } from '../lib/store.js'
+import { useConfirm } from '../components/Confirm.jsx'
 
 export default function Setup() {
   const { eventId } = useParams()
@@ -22,6 +23,8 @@ export default function Setup() {
   // the row leaps down the page mid-edit (2 -> 25 moved it eight places). Hold
   // the order still while a bib field has focus, and re-sort once it's done.
   const [frozenIds, setFrozenIds] = useState(null)
+  const [importError, setImportError] = useState('')
+  const [confirmNode, askConfirm] = useConfirm()
 
   if (!event) {
     return (
@@ -52,8 +55,14 @@ export default function Setup() {
 
   function doImport() {
     const added = importRunners(eventId, importText)
-    setImportText(''); setShowImport(false)
-    if (added.length === 0) alert('No runners parsed. Use one per line: "14, Ola Nordmann".')
+    if (added.length === 0) {
+      // Inline, and the text is kept so it can be corrected rather than retyped.
+      setImportError('Nothing parsed — put one runner per line, like "14, Ola Nordmann".')
+      return
+    }
+    setImportError('')
+    setImportText('')
+    setShowImport(false)
   }
 
   return (
@@ -114,6 +123,7 @@ export default function Setup() {
               border: '1px solid var(--line)', borderRadius: 12, padding: 12, fontSize: 15,
             }}
           />
+          {importError && <div className="form-error">{importError}</div>}
           <button className="btn primary" onClick={doImport}>Import</button>
         </div>
       )}
@@ -172,7 +182,15 @@ export default function Setup() {
             onChange={(e) => setHeatSize(Number(e.target.value) || 1)} />
         </div>
         <button className="btn"
-          onClick={() => { if (runners.length && confirm('Re-split all heats? This clears any timing already recorded.')) autoSplitHeats(eventId, heatSize) }}>
+          onClick={() =>
+            runners.length && askConfirm({
+              title: 'Re-split all heats?',
+              body: 'Rebuilds every heat from scratch in bib order, and clears any timing already recorded for this event.',
+              confirmLabel: 'Re-split',
+              danger: true,
+              onConfirm: () => autoSplitHeats(eventId, heatSize),
+            })
+          }>
           Auto-split
         </button>
         <button className="btn ghost" onClick={() => createHeat(eventId)}>+ Empty heat</button>
@@ -181,6 +199,7 @@ export default function Setup() {
       <div className="list">
         {heats.map((h) => (
           <HeatCard key={h.id} eventId={eventId} heat={h} runners={runners}
+            askConfirm={askConfirm}
             onTime={() => nav(`/event/${eventId}/heat/${h.id}`)} />
         ))}
       </div>
@@ -192,12 +211,13 @@ export default function Setup() {
         </div>
       )}
 
+      {confirmNode}
       <div style={{ height: 24 }} />
     </div>
   )
 }
 
-function HeatCard({ eventId, heat, runners, onTime }) {
+function HeatCard({ eventId, heat, runners, onTime, askConfirm }) {
   const inHeat = useStore((s) => runnersInHeat(s, heat.id))
   const crossings = useStore((s) => crossingsInHeat(s, heat.id).length)
   const state = heat.status === 'running' ? 'live' : heat.status === 'done' ? 'done' : 'setup'
@@ -227,11 +247,15 @@ function HeatCard({ eventId, heat, runners, onTime }) {
       <div className="row" style={{ justifyContent: 'flex-end' }}>
         <button
           className="btn ghost danger sm"
-          onClick={() => {
-            if (confirm(`Delete "${heat.name}"? Its runners become unassigned and any timing for it is cleared.`)) {
-              deleteHeat(heat.id)
-            }
-          }}
+          onClick={() =>
+            askConfirm({
+              title: `Delete ${heat.name}?`,
+              body: 'Its runners become unassigned and any timing recorded for this heat is cleared.',
+              confirmLabel: 'Delete heat',
+              danger: true,
+              onConfirm: () => deleteHeat(heat.id),
+            })
+          }
         >
           Delete heat
         </button>
