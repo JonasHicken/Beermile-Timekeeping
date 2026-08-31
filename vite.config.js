@@ -16,6 +16,10 @@ export default defineConfig({
       manifest: false,
       workbox: {
         globPatterns: ['**/*.{js,css,html,png,woff2}'],
+        // Keep the Excel parser out of the offline install: it's ~425 kB, and
+        // importing a start list is a pre-race job done with a connection.
+        // What has to work offline is TIMING, not setup.
+        globIgnores: ['**/xlsx-*.js'],
         // React Router routes aren't files, so unmatched navigations must fall
         // back to the cached shell rather than a cache miss.
         navigateFallback: '/index.html',

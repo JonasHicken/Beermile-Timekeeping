@@ -238,12 +238,17 @@ export function deleteEvent(id) {
   })
 }
 
-const newRunner = (eventId, { bib, name, category = '' }) => ({
+const newRunner = (eventId, { bib, name, category = '', club = '', email = '' }) => ({
   id: uid(),
   eventId,
   bib: String(bib).trim(),
   name: (name || '').trim(),
   category: (category || '').trim(),
+  club: (club || '').trim(),
+  // Carried so a published result can later be matched to a beermilenorge.no
+  // profile (result claims / public runner pages). Never displayed on the
+  // timing screens, and never published with the public results.
+  email: (email || '').trim(),
   heatId: null,
   status: 'ok',
   penaltyLaps: 0,
@@ -303,6 +308,40 @@ export function importRunners(eventId, text) {
   }
   commit({ ...state, runners: next })
   return added
+}
+
+// Bulk import from a parsed file. Reports what it skipped rather than silently
+// dropping rows — a start list that quietly loses three runners is worse than
+// one that refuses to import.
+export function importRunnerRows(eventId, rows, { replace = false } = {}) {
+  const existing = replace ? [] : runnersInEvent(state, eventId)
+  const taken = new Set(existing.map((r) => String(r.bib)))
+  const added = []
+  const duplicates = []
+  const missingBib = []
+
+  for (const row of rows) {
+    const bib = String(row.bib ?? '').trim()
+    if (!bib) { missingBib.push(row); continue }
+    if (taken.has(bib)) { duplicates.push(row); continue }
+    taken.add(bib)
+    added.push(newRunner(eventId, row))
+  }
+
+  const others = replace
+    ? state.runners.filter((r) => r.eventId !== eventId)
+    : state.runners
+  const next = {
+    ...state,
+    runners: [...others, ...added],
+  }
+  // Replacing the field invalidates any heats and timing built on the old one.
+  if (replace) {
+    next.heats = state.heats.filter((h) => h.eventId !== eventId)
+    next.crossings = state.crossings.filter((c) => c.eventId !== eventId)
+  }
+  commit(next)
+  return { added, duplicates, missingBib }
 }
 
 export function createHeat(eventId, name) {

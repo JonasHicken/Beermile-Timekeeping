@@ -2,10 +2,11 @@ import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   useStore, getEvent, runnersInEvent, heatsInEvent, runnersInHeat,
-  addRunner, removeRunner, updateRunner, importRunners, updateEvent,
+  addRunner, removeRunner, updateRunner, updateEvent,
   autoSplitHeats, createHeat, updateHeat, deleteHeat, assignRunner, crossingsInHeat,
 } from '../lib/store.js'
 import { useConfirm } from '../components/Confirm.jsx'
+import ImportDialog from '../components/ImportDialog.jsx'
 
 export default function Setup() {
   const { eventId } = useParams()
@@ -17,13 +18,12 @@ export default function Setup() {
   const [bib, setBib] = useState('')
   const [name, setName] = useState('')
   const [showImport, setShowImport] = useState(false)
-  const [importText, setImportText] = useState('')
+  const [importReport, setImportReport] = useState(null)
   const [heatSize, setHeatSize] = useState(12)
   // The list is sorted by bib, so editing one re-sorts on every keystroke and
   // the row leaps down the page mid-edit (2 -> 25 moved it eight places). Hold
   // the order still while a bib field has focus, and re-sort once it's done.
   const [frozenIds, setFrozenIds] = useState(null)
-  const [importError, setImportError] = useState('')
   const [confirmNode, askConfirm] = useConfirm()
 
   if (!event) {
@@ -53,17 +53,6 @@ export default function Setup() {
     document.getElementById('bibInput')?.focus()
   }
 
-  function doImport() {
-    const added = importRunners(eventId, importText)
-    if (added.length === 0) {
-      // Inline, and the text is kept so it can be corrected rather than retyped.
-      setImportError('Nothing parsed — put one runner per line, like "14, Ola Nordmann".')
-      return
-    }
-    setImportError('')
-    setImportText('')
-    setShowImport(false)
-  }
 
   return (
     <div className="app">
@@ -105,27 +94,42 @@ export default function Setup() {
       </form>
 
       <div className="row" style={{ marginTop: 10 }}>
-        <button className="btn ghost grow" onClick={() => setShowImport((v) => !v)}>
-          {showImport ? 'Close paste import' : 'Paste a list'}
+        <button className="btn ghost grow" onClick={() => setShowImport(true)}>
+          Import from file
         </button>
       </div>
 
-      {showImport && (
+      {importReport && (
         <div className="card stack" style={{ marginTop: 10 }}>
-          <label className="label">One runner per line — <code>bib, name</code> (category optional)</label>
-          <textarea
-            rows={6}
-            value={importText}
-            onChange={(e) => setImportText(e.target.value)}
-            placeholder={'14, Ola Nordmann\n27, Kari Berg, Women\n33, Jonas H.'}
-            style={{
-              width: '100%', background: 'var(--bg-2)', color: 'var(--text)',
-              border: '1px solid var(--line)', borderRadius: 12, padding: 12, fontSize: 15,
-            }}
-          />
-          {importError && <div className="form-error">{importError}</div>}
-          <button className="btn primary" onClick={doImport}>Import</button>
+          <div>
+            <strong>
+              Imported {importReport.added.length}{' '}
+              {importReport.added.length === 1 ? 'runner' : 'runners'}.
+            </strong>
+            {importReport.duplicates.length > 0 && (
+              <div className="form-error" style={{ marginTop: 6 }}>
+                Skipped {importReport.duplicates.length} with a bib already in the list
+                ({importReport.duplicates.slice(0, 6).map((d) => d.bib).join(', ')}
+                {importReport.duplicates.length > 6 ? '…' : ''}).
+              </div>
+            )}
+            {importReport.missingBib.length > 0 && (
+              <div className="form-error" style={{ marginTop: 6 }}>
+                Skipped {importReport.missingBib.length} row(s) with no bib number.
+              </div>
+            )}
+          </div>
+          <button className="btn sm" onClick={() => setImportReport(null)}>Dismiss</button>
         </div>
+      )}
+
+      {showImport && (
+        <ImportDialog
+          eventId={eventId}
+          existingCount={runners.length}
+          onClose={() => setShowImport(false)}
+          onDone={(report) => setImportReport(report)}
+        />
       )}
 
       <div className="list" style={{ marginTop: 14 }}>

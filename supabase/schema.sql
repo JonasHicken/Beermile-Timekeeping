@@ -39,10 +39,18 @@ create table if not exists public.tk_runners (
   bib         text not null,
   name        text not null default '',
   category    text not null default '',
+  club        text not null default '',
+  -- Carried from the imported start list so a published result can later be
+  -- matched to a profile (result claims / public runner pages). NOT readable
+  -- with the anon key -- see the column grant below.
+  email       text,
   heat_id     uuid,
   epc         text,                            -- reserved: RFID tag EPC -> bib map
   created_at  timestamptz not null default now()
 );
+
+alter table public.tk_runners add column if not exists club text not null default '';
+alter table public.tk_runners add column if not exists email text;
 create index if not exists tk_runners_event on public.tk_runners(event_id);
 
 alter table public.tk_runners drop constraint if exists tk_runners_len;
@@ -108,6 +116,13 @@ create policy tk_runners_read on public.tk_runners
   for select to anon using (
     exists (select 1 from public.tk_events e where e.id = event_id and e.published)
   );
+
+-- RLS is row-level only, so `email` needs COLUMN-level protection or the public
+-- key could harvest every entrant's address off the start list. Same guard the
+-- main site puts on results.epost. Anon may read every column except email.
+revoke select on table public.tk_runners from anon;
+grant select (id, event_id, bib, name, category, club, heat_id, created_at)
+  on table public.tk_runners to anon;
 
 drop policy if exists tk_heats_read on public.tk_heats;
 create policy tk_heats_read on public.tk_heats
