@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useStore, standings, heatsInEvent } from '../lib/store.js'
 import { fmt, fmtShort } from '../lib/time.js'
+import { useOnlineSync } from '../lib/online.js'
 
 export default function Live() {
   const { eventId } = useParams()
@@ -9,6 +10,7 @@ export default function Live() {
   const heats = useStore((s) => heatsInEvent(s, eventId))
   const [heatFilter, setHeatFilter] = useState('all')
   const [copied, setCopied] = useState(false)
+  useOnlineSync(eventId, Boolean(data.event?.online))
 
   const { event, finishers = [], inProgress = [], didNotFinish = [], notStarted = [] } = data
 

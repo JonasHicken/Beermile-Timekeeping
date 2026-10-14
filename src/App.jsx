@@ -4,6 +4,7 @@ import Setup from './pages/Setup.jsx'
 import Timing from './pages/Timing.jsx'
 import Review from './pages/Review.jsx'
 import Live from './pages/Live.jsx'
+import Join from './pages/Join.jsx'
 
 export default function App() {
   return (
@@ -13,6 +14,7 @@ export default function App() {
       <Route path="/event/:eventId/heat/:heatId" element={<Timing />} />
       <Route path="/event/:eventId/heat/:heatId/review" element={<Review />} />
       <Route path="/event/:eventId/live" element={<Live />} />
+      <Route path="/join/:eventId" element={<Join />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   )

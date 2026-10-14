@@ -99,7 +99,9 @@ function EventRow({ ev, onOpen, onLive, onDelete }) {
     <div className="event-card stack">
       <div className="row">
         <div className="grow" onClick={onOpen} style={{ cursor: 'pointer' }}>
-          <div className="ev-name">{ev.name}</div>
+          <div className="ev-name">
+            {ev.name} {ev.online && <span className="pill live" style={{ verticalAlign: 3 }}>Shared</span>}
+          </div>
           <div className="ev-meta">
             {ev.date} · {ev.numLaps} laps · {runners} runners · {heats} heats
           </div>

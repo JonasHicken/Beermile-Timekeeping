@@ -5,7 +5,9 @@ import {
   startHeat, finishHeat, reopenHeat, resetHeat, recordCrossing, undoLastCrossing,
   requiredLaps, statusOf,
 } from '../lib/store.js'
-import { fmt } from '../lib/time.js'
+import { fmt, nowMs } from '../lib/time.js'
+import { useOnlineSync } from '../lib/online.js'
+import SyncBadge from '../components/SyncBadge.jsx'
 import RunnerSheet from '../components/RunnerSheet.jsx'
 import { useConfirm } from '../components/Confirm.jsx'
 
@@ -24,6 +26,26 @@ export default function Timing() {
   const [hideFinished, setHideFinished] = useState(false)
   const [confirmNode, askConfirm] = useConfirm()
   const wakeRef = useRef(null)
+  const online = Boolean(event?.online)
+  useOnlineSync(eventId, online)
+
+  // With several phones on one heat, each timer usually watches a few runners.
+  // "Mine" is that set, kept on this phone only, and is just a filter: any
+  // runner can still be tapped from "All".
+  const mineKey = `bmtk:mine:${heatId}`
+  const [mine, setMine] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(mineKey) || '[]')) } catch { return new Set() }
+  })
+  const [onlyMine, setOnlyMine] = useState(false)
+  const [picking, setPicking] = useState(false)
+  function toggleMine(id) {
+    setMine((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id); else next.add(id)
+      try { localStorage.setItem(mineKey, JSON.stringify([...next])) } catch { /* filter only */ }
+      return next
+    })
+  }
 
   const running = heat?.status === 'running'
 
@@ -73,7 +95,10 @@ export default function Timing() {
     }
   })
   const finishedCount = rows.filter((x) => x.finished).length
-  const visible = hideFinished ? rows.filter((x) => !x.finished && !x.out) : rows
+  const mineCount = rows.filter((x) => mine.has(x.runner.id)).length
+  const visible = rows
+    .filter((x) => picking || !onlyMine || !mineCount || mine.has(x.runner.id))
+    .filter((x) => picking || !hideFinished || (!x.finished && !x.out))
 
   function showToast(msg) {
     setToast(msg)
@@ -82,11 +107,13 @@ export default function Timing() {
   }
 
   function tap(row) {
+    if (picking) { toggleMine(row.runner.id); return }
     if (!running) return
     if (row.out) { showToast(`${row.runner.bib} is ${row.status.toUpperCase()}`); return }
     if (row.done >= row.need) { showToast(`${row.runner.bib} already finished`); return }
     const c = recordCrossing(heatId, row.runner.id, 'tap')
     if (!c) return
+    if (c.duplicate) { showToast(`${row.runner.bib} already has this lap`); return }
     setFlashId(row.runner.id)
     setTimeout(() => setFlashId((id) => (id === row.runner.id ? null : id)), 220)
     if (navigator.vibrate) navigator.vibrate(15)
@@ -99,7 +126,7 @@ export default function Timing() {
     if (last) {
       showToast(`Undo ${last.bib} · lap ${last.lap}`)
       if (navigator.vibrate) navigator.vibrate([10, 40, 10])
-    } else showToast('Nothing to undo')
+    } else showToast(online ? 'None of your taps to undo' : 'Nothing to undo')
   }
 
   return (
@@ -107,6 +134,7 @@ export default function Timing() {
       <div className="topbar">
         <Link to={`/event/${eventId}/setup`} className="backlink">← Setup</Link>
         <div className="spacer" />
+        {online && <SyncBadge eventId={eventId} />}
         <button className="btn ghost" onClick={() => nav(`/event/${eventId}/heat/${heatId}/review`)}>Review</button>
         <button className="btn ghost" onClick={() => nav(`/event/${eventId}/live`)}>Results</button>
       </div>
@@ -144,7 +172,10 @@ export default function Timing() {
       {heat.status === 'pending' && runners.length > 0 && (
         <div className="card stack center" style={{ marginTop: 24, padding: 28 }}>
           <div className="display" style={{ fontSize: 22 }}>{runners.length} on the line</div>
-          <div className="muted">Mass start — tap when the gun goes.</div>
+          <div className="muted">
+            Mass start — tap when the gun goes.
+            {online && ' Only the starter presses this; the other phones follow by themselves.'}
+          </div>
           <button className="btn primary lg block" onClick={() => startHeat(heatId)}>
             ▶ Start heat
           </button>
@@ -153,11 +184,28 @@ export default function Timing() {
 
       {(running || heat.status === 'done') && (
         <>
-          {finishedCount > 0 && (
-            <button className="toggle" onClick={() => setHideFinished((v) => !v)}>
-              <span className={`toggle-box${hideFinished ? ' on' : ''}`} />
-              Hide finished ({finishedCount})
+          <div className="row wrap" style={{ gap: 6 }}>
+            {finishedCount > 0 && !picking && (
+              <button className="toggle" onClick={() => setHideFinished((v) => !v)}>
+                <span className={`toggle-box${hideFinished ? ' on' : ''}`} />
+                Hide finished ({finishedCount})
+              </button>
+            )}
+            {mineCount > 0 && !picking && (
+              <button className="toggle" onClick={() => setOnlyMine((v) => !v)}>
+                <span className={`toggle-box${onlyMine ? ' on' : ''}`} />
+                Only mine ({mineCount})
+              </button>
+            )}
+            <div className="spacer" />
+            <button className={`btn sm${picking ? ' primary' : ' ghost'}`} onClick={() => { setPicking((v) => !v); if (picking && mineCount) setOnlyMine(true) }}>
+              {picking ? 'Done' : 'Choose mine'}
             </button>
+          </div>
+          {picking && (
+            <div className="muted tiny" style={{ marginTop: 6 }}>
+              Tap the runners you are timing. Taps here only choose; no laps are recorded.
+            </div>
           )}
 
           <div className="grid" style={{ marginTop: 14 }}>
@@ -166,8 +214,10 @@ export default function Timing() {
                 key={row.runner.id}
                 row={row}
                 flash={flashId === row.runner.id}
+                picking={picking}
+                isMine={mine.has(row.runner.id)}
                 elapsed={row.finished ? finishElapsed(crossings, row.runner.id, row.need, heat.startedAt) : null}
-                disabled={!running}
+                disabled={!running && !picking}
                 onTap={() => tap(row)}
                 onDetail={() => setSheetRunner(row.runner.id)}
               />
@@ -243,19 +293,21 @@ function finishElapsed(crossings, runnerId, need, startedAt) {
 }
 
 function HeatClock({ startedAt }) {
-  const [now, setNow] = useState(Date.now())
+  // On the server's clock (nowMs), like the start time it is measured from.
+  const [now, setNow] = useState(nowMs())
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), 100)
+    const t = setInterval(() => setNow(nowMs()), 100)
     return () => clearInterval(t)
   }, [])
   return <span className="clock" style={{ fontSize: 26 }}>{fmt(now - startedAt)}</span>
 }
 
-function RunnerTile({ row, flash, elapsed, disabled, onTap, onDetail }) {
+function RunnerTile({ row, flash, elapsed, disabled, picking, isMine, onTap, onDetail }) {
   const { runner, need, done, finished, out, status } = row
   return (
     <div
-      className={`tile${flash ? ' flash' : ''}${finished ? ' done' : ''}${out ? ' out' : ''}`}
+      className={`tile${flash ? ' flash' : ''}${finished ? ' done' : ''}${out ? ' out' : ''}${picking ? ' picking' : ''}${picking && isMine ? ' mine-on' : ''}`}
+      aria-pressed={picking ? isMine : undefined}
       onClick={onTap}
       role="button"
       tabIndex={disabled && !finished ? -1 : 0}

@@ -15,6 +15,13 @@
 // Lap ORDINALS are always derived from chronological order at read time, never
 // from the stored `lap` field — voiding a mid-race crossing must renumber the
 // ones after it. The stored `lap` records what it was at capture, for audit.
+//
+// ONLINE EVENTS (opened from a timing link, see online.js) are shared by
+// several phones. Their start list and heats come from the admin portal and
+// are read-only here; what a phone changes at the track (laps, heat start and
+// finish, runner status) is stamped with `endretMs` and queued in `outbox`
+// until the server has it. The newest change wins, so stamping is the whole
+// conflict story.
 // ---------------------------------------------------------------------------
 
 import { useSyncExternalStore } from 'react'
@@ -22,14 +29,17 @@ import { nowMs } from './time.js'
 
 const KEY = 'bmtk:v1'
 
-const empty = () => ({ events: [], runners: [], heats: [], crossings: [] })
+const empty = () => ({
+  events: [], runners: [], heats: [], crossings: [],
+  outbox: { crossings: [], heats: [], runners: [] },
+})
 
 function load() {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) return empty()
     const data = JSON.parse(raw)
-    return { ...empty(), ...data }
+    return { ...empty(), ...data, outbox: { ...empty().outbox, ...data.outbox } }
   } catch {
     return empty()
   }
@@ -62,6 +72,9 @@ function getSnapshot() {
   return state
 }
 
+// For code outside React (the sync loop) that needs the current state.
+export const getState = () => state
+
 // Cross-tab sync: another tab writing the same key updates us.
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', (e) => {
@@ -72,8 +85,42 @@ if (typeof window !== 'undefined') {
   })
 }
 
+// The server's ids are uuids, so the fallback is shaped like one too.
 const uid = () =>
-  (crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`)
+  crypto?.randomUUID?.() ??
+  'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0
+    return (ch === 'x' ? r : (r & 3) | 8).toString(16)
+  })
+
+// Which phone made a crossing. Lets Undo take back this phone's own last tap,
+// not another timer's.
+export const DEVICE_ID = (() => {
+  try {
+    let id = localStorage.getItem('bmtk:enhet')
+    if (!id) { id = uid(); localStorage.setItem('bmtk:enhet', id) }
+    return id
+  } catch { return uid() }
+})()
+
+export const isOnline = (s, eventId) => Boolean(getEvent(s, eventId)?.online)
+
+// Stamps changed rows of an online event and queues them for the server.
+// Offline events pass straight through.
+function stamp(next, kind, ids) {
+  const byId = new Set(ids)
+  const online = new Set(next.events.filter((e) => e.online).map((e) => e.id))
+  const queued = []
+  const at = nowMs()
+  const rows = next[kind].map((row) => {
+    if (!byId.has(row.id) || !online.has(row.eventId)) return row
+    queued.push(row.id)
+    return { ...row, endretMs: Math.max(at, (row.endretMs ?? 0) + 1) }
+  })
+  if (!queued.length) return next
+  const box = new Set([...next.outbox[kind], ...queued])
+  return { ...next, [kind]: rows, outbox: { ...next.outbox, [kind]: [...box] } }
+}
 
 // ---- React hooks -----------------------------------------------------------
 
@@ -126,10 +173,27 @@ export const getHeat = (s, id) => s.heats.find((h) => h.id === id) || null
 
 export const getRunner = (s, id) => s.runners.find((r) => r.id === id) || null
 
+// Two taps for the same runner within this long are one crossing: no lap of a
+// beer mile is that quick, and with several phones timing one heat, two people
+// will sometimes tap the same runner. The first tap counts.
+export const DUPLICATE_MS = 15000
+
+export function dedupeCrossings(sorted) {
+  const last = {}
+  return sorted.filter((c) => {
+    const prev = last[c.runnerId]
+    if (prev != null && c.capturedAt - prev < DUPLICATE_MS) return false
+    last[c.runnerId] = c.capturedAt
+    return true
+  })
+}
+
 export const crossingsInHeat = (s, heatId) =>
-  s.crossings
-    .filter((c) => c.heatId === heatId && !c.void)
-    .sort((a, b) => a.capturedAt - b.capturedAt)
+  dedupeCrossings(
+    s.crossings
+      .filter((c) => c.heatId === heatId && !c.void)
+      .sort((a, b) => a.capturedAt - b.capturedAt),
+  )
 
 // Includes voided rows — for the review log, where they show struck through.
 export const allCrossingsInHeat = (s, heatId) =>
@@ -262,10 +326,10 @@ export function addRunner(eventId, fields) {
 }
 
 export function updateRunner(id, patch) {
-  commit({
+  commit(stamp({
     ...state,
     runners: state.runners.map((r) => (r.id === id ? { ...r, ...patch } : r)),
-  })
+  }, 'runners', [id]))
 }
 
 export function setRunnerStatus(id, status) {
@@ -359,10 +423,10 @@ export function createHeat(eventId, name) {
 }
 
 export function updateHeat(id, patch) {
-  commit({
+  commit(stamp({
     ...state,
     heats: state.heats.map((h) => (h.id === id ? { ...h, ...patch } : h)),
-  })
+  }, 'heats', [id]))
 }
 
 export function deleteHeat(id) {
@@ -425,11 +489,21 @@ export function reopenHeat(heatId) {
 }
 
 export function resetHeat(heatId) {
+  const heat = getHeat(state, heatId)
+  const heats = state.heats.map((h) =>
+    h.id === heatId ? { ...h, status: 'pending', startedAt: null } : h,
+  )
+  // Shared with other phones: the crossings are voided, not deleted, so the
+  // reset reaches them too (a deleted row would just come back from the server).
+  if (heat && isOnline(state, heat.eventId)) {
+    const ids = state.crossings.filter((c) => c.heatId === heatId && !c.void).map((c) => c.id)
+    const next = { ...state, heats, crossings: state.crossings.map((c) => (ids.includes(c.id) ? { ...c, void: true } : c)) }
+    commit(stamp(stamp(next, 'heats', [heatId]), 'crossings', ids))
+    return
+  }
   commit({
     ...state,
-    heats: state.heats.map((h) =>
-      h.id === heatId ? { ...h, status: 'pending', startedAt: null } : h,
-    ),
+    heats,
     crossings: state.crossings.filter((c) => c.heatId !== heatId),
   })
 }
@@ -440,8 +514,13 @@ export function recordCrossing(heatId, runnerId, source = 'tap', at = nowMs()) {
   const heat = state.heats.find((h) => h.id === heatId)
   const event = state.events.find((e) => e.id === heat?.eventId)
   const runner = state.runners.find((r) => r.id === runnerId)
-  const done = lapCount(state, heatId, runnerId)
+  const kept = crossingsForRunner(state, heatId, runnerId)
+  const done = kept.length
   if (event && done >= requiredLaps(event, runner)) return null
+  // A second tap inside the duplicate window would be hidden anyway; not
+  // recording it keeps Undo meaning "take back the lap I can see".
+  const prev = kept[kept.length - 1]
+  if (prev && at - prev.capturedAt < DUPLICATE_MS) return { ...prev, duplicate: true }
   const c = {
     id: uid(),
     eventId: event?.id ?? null,
@@ -453,52 +532,58 @@ export function recordCrossing(heatId, runnerId, source = 'tap', at = nowMs()) {
     source, // 'tap' | 'rfid' | 'manual'
     rssi: null, // reserved for RFID
     void: false,
+    enhet: DEVICE_ID,
   }
-  commit({ ...state, crossings: [...state.crossings, c] })
+  commit(stamp({ ...state, crossings: [...state.crossings, c] }, 'crossings', [c.id]))
   return c
 }
 
-// Undo the most recent non-void crossing in a heat (or for one runner).
+// Undo the most recent non-void crossing in a heat (or for one runner). In a
+// shared heat, only this phone's own taps: Undo must never take back a lap
+// another timer recorded.
 export function undoLastCrossing(heatId, runnerId = null) {
+  const heat = getHeat(state, heatId)
+  const ownOnly = heat && isOnline(state, heat.eventId)
   const pool = state.crossings
     .filter((c) => c.heatId === heatId && !c.void && (!runnerId || c.runnerId === runnerId))
+    .filter((c) => !ownOnly || c.enhet === DEVICE_ID)
     .sort((a, b) => b.capturedAt - a.capturedAt)
   const last = pool[0]
   if (!last) return null
-  commit({
+  commit(stamp({
     ...state,
     crossings: state.crossings.map((c) => (c.id === last.id ? { ...c, void: true } : c)),
-  })
+  }, 'crossings', [last.id]))
   return last
 }
 
 // ---- targeted corrections (the review screen) ------------------------------
 
 export function setCrossingVoid(id, isVoid) {
-  commit({
+  commit(stamp({
     ...state,
     crossings: state.crossings.map((c) => (c.id === id ? { ...c, void: isVoid } : c)),
-  })
+  }, 'crossings', [id]))
 }
 
 // Fix a mistap: move this crossing to a different runner.
 export function reassignCrossing(id, runnerId) {
   const runner = state.runners.find((r) => r.id === runnerId)
-  commit({
+  commit(stamp({
     ...state,
     crossings: state.crossings.map((c) =>
       c.id === id ? { ...c, runnerId, bib: runner?.bib ?? null, source: 'manual' } : c,
     ),
-  })
+  }, 'crossings', [id]))
 }
 
 export function setCrossingTime(id, capturedAt) {
-  commit({
+  commit(stamp({
     ...state,
     crossings: state.crossings.map((c) =>
       c.id === id ? { ...c, capturedAt, source: 'manual' } : c,
     ),
-  })
+  }, 'crossings', [id]))
 }
 
 export function exportEvent(eventId) {
@@ -508,4 +593,123 @@ export function exportEvent(eventId) {
     heats: heatsInEvent(state, eventId),
     crossings: state.crossings.filter((c) => c.eventId === eventId),
   }
+}
+
+// ---- online events (shared by several phones) ------------------------------
+
+const fromServerRunner = (eventId, r) => ({
+  id: r.id, eventId, bib: String(r.bib), name: r.name || '', category: r.category || '',
+  club: '', email: '', heatId: r.heat_id ?? null,
+  status: r.status || 'ok', penaltyLaps: r.straffe ?? 0, epc: null, endretMs: r.endret_ms ?? 0,
+})
+const fromServerHeat = (eventId, h) => ({
+  id: h.id, eventId, name: h.name, order: h.order ?? 0,
+  status: h.status || 'pending', startedAt: h.started_at ?? null, endretMs: h.endret_ms ?? 0,
+})
+const fromServerCrossing = (eventId, c) => ({
+  id: c.id, eventId, heatId: c.heat_id, runnerId: c.runner_id, bib: c.bib ?? null,
+  lap: c.lap, capturedAt: c.captured_at, source: c.source || 'tap', rssi: null,
+  void: !!c.void, enhet: c.enhet ?? null, endretMs: c.endret_ms ?? 0,
+})
+
+// What a phone holds that the server does not have yet.
+export function pendingFor(s, eventId) {
+  const pick = (kind) => s[kind].filter((x) => x.eventId === eventId && s.outbox[kind].includes(x.id))
+  return { crossings: pick('crossings'), heats: pick('heats'), runners: pick('runners') }
+}
+
+export const pendingCount = (s, eventId) => {
+  const p = pendingFor(s, eventId)
+  return p.crossings.length + p.heats.length + p.runners.length
+}
+
+// The server has these rows as of the given stamps. A row changed again while
+// the request was in flight has a newer stamp and stays queued.
+export function ackSent(sent) {
+  const outbox = { ...state.outbox }
+  for (const kind of ['crossings', 'heats', 'runners']) {
+    const stamps = Object.fromEntries(sent[kind].map((x) => [x.id, x.endretMs]))
+    outbox[kind] = outbox[kind].filter((id) => {
+      if (!(id in stamps)) return true
+      const now = state[kind].find((x) => x.id === id)
+      return Boolean(now) && (now.endretMs ?? 0) > stamps[id]
+    })
+  }
+  commit({ ...state, outbox })
+}
+
+// Opening a timing link: the event as the server has it, plus the token.
+export function adoptOnlineEvent(data, token) {
+  const id = data.event.id
+  const ev = {
+    id, name: data.event.name, date: data.event.date ?? '', numLaps: data.event.num_laps ?? 4,
+    createdAt: getEvent(state, id)?.createdAt ?? nowMs(),
+    online: { token },
+  }
+  commit({ ...state, events: [...state.events.filter((e) => e.id !== id), ev] })
+  mergeServer(id, data)
+  return ev
+}
+
+// Folds what the server sent into the local store. The start list and the
+// heats' names and order belong to the desk, so the server's version always
+// wins there. Anything this phone changed and has not sent yet (still in the
+// outbox, with a stamp at least as new) keeps the local version: it is about
+// to be sent, and the server takes it if it is newer.
+export function mergeServer(eventId, data) {
+  let changed = false
+  if (!getEvent(state, eventId)) return
+  const events = state.events.map((e) => {
+    if (e.id !== eventId || !data.event) return e
+    const next = { ...e, name: data.event.name, date: data.event.date ?? '', numLaps: data.event.num_laps ?? 4 }
+    if (next.name !== e.name || next.date !== e.date || next.numLaps !== e.numLaps) { changed = true; return next }
+    return e
+  })
+
+  const keepLocal = (kind, local, remote) =>
+    Boolean(local) && state.outbox[kind].includes(local.id) && (local.endretMs ?? 0) >= (remote.endret_ms ?? 0)
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b)
+
+  // Runners and heats arrive in full each time, so anything missing was removed.
+  function mergeList(kind, remoteRows, fromServer, deskFields) {
+    const local = Object.fromEntries(state[kind].filter((x) => x.eventId === eventId).map((x) => [x.id, x]))
+    const merged = remoteRows.map((r) => {
+      const l = local[r.id]
+      const server = fromServer(eventId, r)
+      let next = server
+      if (keepLocal(kind, l, r)) {
+        next = { ...l }
+        for (const f of deskFields) next[f] = server[f]
+      }
+      if (!l || !same(l, next)) changed = true
+      return l && same(l, next) ? l : next
+    })
+    if (Object.keys(local).length !== remoteRows.length) changed = true
+    return [...state[kind].filter((x) => x.eventId !== eventId), ...merged]
+  }
+
+  const runners = data.runners
+    ? mergeList('runners', data.runners, fromServerRunner, ['bib', 'name', 'category', 'heatId'])
+    : state.runners
+  const heats = data.heats
+    ? mergeList('heats', data.heats, fromServerHeat, ['name', 'order'])
+    : state.heats
+
+  // Crossings arrive as changes since last time, so nothing is removed here.
+  let crossings = state.crossings
+  if (data.crossings?.length) {
+    const index = new Map(crossings.map((c, i) => [c.id, i]))
+    crossings = [...crossings]
+    for (const r of data.crossings) {
+      const i = index.get(r.id)
+      const l = i == null ? null : crossings[i]
+      if (keepLocal('crossings', l, r)) continue
+      const next = fromServerCrossing(eventId, r)
+      if (l && same(l, next)) continue
+      changed = true
+      if (i == null) { index.set(r.id, crossings.length); crossings.push(next) } else crossings[i] = next
+    }
+  }
+
+  if (changed) commit({ ...state, events, runners, heats, crossings })
 }

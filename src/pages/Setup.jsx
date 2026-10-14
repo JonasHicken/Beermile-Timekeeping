@@ -7,6 +7,8 @@ import {
 } from '../lib/store.js'
 import { useConfirm } from '../components/Confirm.jsx'
 import ImportDialog from '../components/ImportDialog.jsx'
+import SyncBadge from '../components/SyncBadge.jsx'
+import { useOnlineSync } from '../lib/online.js'
 
 export default function Setup() {
   const { eventId } = useParams()
@@ -25,6 +27,10 @@ export default function Setup() {
   // the order still while a bib field has focus, and re-sort once it's done.
   const [frozenIds, setFrozenIds] = useState(null)
   const [confirmNode, askConfirm] = useConfirm()
+  // An event opened from a timing link is shared with other phones; its start
+  // list and heats are set in the admin portal, so here they are read-only.
+  const online = Boolean(event?.online)
+  useOnlineSync(eventId, online)
 
   if (!event) {
     return (
@@ -59,9 +65,32 @@ export default function Setup() {
       <div className="topbar">
         <Link to="/" className="backlink">← Home</Link>
         <div className="spacer" />
+        {online && <SyncBadge eventId={eventId} />}
         <button className="btn ghost" onClick={() => nav(`/event/${eventId}/live`)}>Results</button>
       </div>
 
+      {online ? (
+        <div className="stack">
+          <h1 style={{ margin: 0, fontSize: 26 }}>{event.name}</h1>
+          <div className="muted tiny">{event.date} · {event.numLaps} laps</div>
+          <div className="card muted" style={{ fontSize: 15 }}>
+            Shared race: every phone with the timing link sees the same heats and laps.
+            The start list and heats are set by the organiser on beermilenorge.no and
+            update here by themselves.
+          </div>
+          {heats.length > 0 && (
+            <div className="list">
+              {heats.map((h) => (
+                <button key={h.id} className={`btn block${h.status === 'running' ? ' primary' : ''}`}
+                  onClick={() => nav(`/event/${eventId}/heat/${h.id}`)}>
+                  {h.name} · {runners.filter((r) => r.heatId === h.id).length} runners
+                  {h.status === 'running' ? ' · running' : h.status === 'done' ? ' · done' : ''}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="stack">
         <input
           value={event.name}
@@ -80,12 +109,14 @@ export default function Setup() {
           </div>
         </div>
       </div>
+      )}
 
       {/* --- Start list --- */}
       <h2 style={{ marginTop: 28, marginBottom: 12, fontSize: 16 }}>
         Start list <span className="muted">· {runners.length}</span>
       </h2>
 
+      {!online && <>
       <form className="row" onSubmit={quickAdd}>
         <input id="bibInput" style={{ width: 92 }} inputMode="numeric" placeholder="Bib"
           value={bib} onChange={(e) => setBib(e.target.value)} />
@@ -98,6 +129,7 @@ export default function Setup() {
           Import from file
         </button>
       </div>
+      </>}
 
       {importReport && (
         <div className="card stack" style={{ marginTop: 10 }}>
@@ -141,6 +173,7 @@ export default function Setup() {
               className="bib-edit"
               value={r.bib}
               onChange={(e) => updateRunner(r.id, { bib: e.target.value })}
+              readOnly={online}
               onFocus={() => setFrozenIds(displayRunners.map((x) => x.id))}
               onBlur={() => setFrozenIds(null)}
               inputMode="numeric"
@@ -150,6 +183,7 @@ export default function Setup() {
               className="name-edit grow"
               value={r.name}
               onChange={(e) => updateRunner(r.id, { name: e.target.value })}
+              readOnly={online}
               placeholder="Name"
               aria-label={`Name for bib ${r.bib}`}
             />
@@ -160,6 +194,7 @@ export default function Setup() {
               className={`heat-select${r.heatId ? '' : ' unassigned'}`}
               value={r.heatId ?? ''}
               onChange={(e) => assignRunner(r.id, e.target.value || null)}
+              disabled={online}
               aria-label={`Heat for bib ${r.bib}`}
             >
               <option value="">Unassigned</option>
@@ -167,7 +202,7 @@ export default function Setup() {
                 <option key={h.id} value={h.id}>{h.name}</option>
               ))}
             </select>
-            <button className="btn ghost danger" onClick={() => removeRunner(r.id)} aria-label="Remove">✕</button>
+            {!online && <button className="btn ghost danger" onClick={() => removeRunner(r.id)} aria-label="Remove">✕</button>}
           </div>
         ))}
       </div>
@@ -175,10 +210,13 @@ export default function Setup() {
       {/* --- Heats --- */}
       <h2 style={{ marginTop: 28, marginBottom: 4, fontSize: 16 }}>Heats</h2>
       <p className="muted tiny" style={{ marginTop: 0 }}>
-        {assignedCount}/{runners.length} runners assigned. Auto-split fills heats in bib
-        order, or set each runner’s heat in the start list above. Tap a heat’s name to rename it.
+        {assignedCount}/{runners.length} runners assigned.{' '}
+        {online
+          ? 'Heats are set by the organiser.'
+          : 'Auto-split fills heats in bib order, or set each runner’s heat in the start list above. Tap a heat’s name to rename it.'}
       </p>
 
+      {!online && (
       <div className="row wrap" style={{ marginBottom: 12 }}>
         <div style={{ width: 130 }}>
           <label className="label">Runners / heat</label>
@@ -199,10 +237,11 @@ export default function Setup() {
         </button>
         <button className="btn ghost" onClick={() => createHeat(eventId)}>+ Empty heat</button>
       </div>
+      )}
 
       <div className="list">
         {heats.map((h) => (
-          <HeatCard key={h.id} eventId={eventId} heat={h} runners={runners}
+          <HeatCard key={h.id} eventId={eventId} heat={h} runners={runners} online={online}
             askConfirm={askConfirm}
             onTime={() => nav(`/event/${eventId}/heat/${h.id}`)} />
         ))}
@@ -221,7 +260,7 @@ export default function Setup() {
   )
 }
 
-function HeatCard({ eventId, heat, runners, onTime, askConfirm }) {
+function HeatCard({ heat, onTime, askConfirm, online }) {
   const inHeat = useStore((s) => runnersInHeat(s, heat.id))
   const crossings = useStore((s) => crossingsInHeat(s, heat.id).length)
   const state = heat.status === 'running' ? 'live' : heat.status === 'done' ? 'done' : 'setup'
@@ -232,6 +271,7 @@ function HeatCard({ eventId, heat, runners, onTime, askConfirm }) {
           className="heat-name grow"
           value={heat.name}
           onChange={(e) => updateHeat(heat.id, { name: e.target.value })}
+          readOnly={online}
           aria-label="Heat name"
         />
         <span className={`pill ${state}`}>{heat.status}</span>
@@ -248,6 +288,7 @@ function HeatCard({ eventId, heat, runners, onTime, askConfirm }) {
         {heat.status === 'pending' ? 'Open timing' : heat.status === 'running' ? 'Resume timing' : 'Review timing'}
       </button>
       {/* Deliberately low-weight: destructive, and sits on every heat card. */}
+      {!online && (
       <div className="row" style={{ justifyContent: 'flex-end' }}>
         <button
           className="btn ghost danger sm"
@@ -264,6 +305,7 @@ function HeatCard({ eventId, heat, runners, onTime, askConfirm }) {
           Delete heat
         </button>
       </div>
+      )}
     </div>
   )
 }

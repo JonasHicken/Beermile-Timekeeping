@@ -2,8 +2,9 @@ import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   useStore, getEvent, getHeat, runnersInHeat, allCrossingsInHeat,
-  setCrossingVoid, reassignCrossing, setCrossingTime,
+  setCrossingVoid, reassignCrossing, setCrossingTime, dedupeCrossings,
 } from '../lib/store.js'
+import { useOnlineSync } from '../lib/online.js'
 import { fmt, parseElapsed } from '../lib/time.js'
 
 // Chronological crossing log for one heat. This is the accuracy backstop:
@@ -18,6 +19,7 @@ export default function Review() {
   const runners = useStore((s) => runnersInHeat(s, heatId))
   const crossings = useStore((s) => allCrossingsInHeat(s, heatId))
   const [editing, setEditing] = useState(null)
+  useOnlineSync(eventId, Boolean(event?.online))
 
   if (!event || !heat) {
     return (
@@ -32,15 +34,18 @@ export default function Review() {
 
   // Lap ordinals are derived here, not read from the stored `lap`, so voiding
   // a crossing renumbers everything after it for that runner.
+  // A second tap for the same runner within the duplicate window (two phones
+  // tapping the same crossing) is shown, but does not count as a lap.
+  const counted = new Set(dedupeCrossings(crossings.filter((c) => !c.void)).map((c) => c.id))
   const ordinals = {}
   const counters = {}
   for (const c of crossings) {
-    if (c.void) continue
+    if (!counted.has(c.id)) continue
     counters[c.runnerId] = (counters[c.runnerId] || 0) + 1
     ordinals[c.id] = counters[c.runnerId]
   }
 
-  const liveCount = crossings.filter((c) => !c.void).length
+  const liveCount = counted.size
 
   return (
     <div className="app">
@@ -73,7 +78,9 @@ export default function Review() {
                 <span className="bib">{runner?.bib ?? '?'}</span>
                 <span className="grow">
                   <span className="log-name">{runner?.name || '—'}</span>
-                  {!c.void && <span className="muted tiny"> · lap {ordinals[c.id]}</span>}
+                  {!c.void && (counted.has(c.id)
+                    ? <span className="muted tiny"> · lap {ordinals[c.id]}</span>
+                    : <span className="muted tiny"> · duplicate, not counted</span>)}
                 </span>
                 <span className={`src src-${c.source}`}>{c.source}</span>
               </div>
