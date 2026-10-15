@@ -1,28 +1,66 @@
 # Beermile Timekeeping
 
+> **🚧 Still in development.** The core works end to end and runs offline, but
+> it has not yet timed a real race. Expect rough edges and breaking changes to
+> the data format until it has.
+
 Mobile-first race timing for beer miles. **Tap timing, live results, RFID-ready.**
-Built to replace a hired timing crew: an operator taps a runner's tile as they
-cross, the app tracks laps and finish times, and results are ready instantly.
 
-## Why it's built this way
+## What it's for
 
-Timing is really two problems: the **clock** (an exact timestamp when someone
-crosses — easy, must be perfect) and the **identity** (which bib — the hard part).
-This app makes a human the identity engine (tap the tile) and the button the
-clock. That is 100% reliable and needs no hardware.
+A beer mile is four laps of a 400 m track, with a beer finished before each
+lap. Races run in heats of 25–30 people starting together, and every runner
+needs four lap times and a finish time — plus penalty laps for anyone who
+doesn't keep their beer down.
+
+Timing that properly has meant hiring a professional timing crew, which is
+expensive for a small volunteer-run event. This app exists to replace that
+crew with phones the organisers already own, while ending up just as accurate
+and a lot more hands-off.
+
+It was built for the Norwegian championship run by Norges Beermile Forbund,
+but nothing in it is specific to one event: any organiser can create a race,
+load a start list and time it.
+
+## The idea
+
+Timing is really two problems:
+
+- **The clock** — an exact timestamp when someone crosses the line. Easy, but
+  it must be perfect.
+- **The identity** — *which* runner crossed. This is the hard part.
+
+Camera and bib-recognition approaches try to solve both at once and fail on
+the second: bibs get covered, crumpled and blocked by the runner in front. So
+this app splits them. Right now a person is the identity engine — they tap the
+runner's tile as they cross — and the tap is the clock. That is reliable today
+and needs no hardware.
+
+The data model is designed so that later, an **RFID chip reader** at the line
+can replace the person doing the tapping without changing the app. Crossings
+land in the same log whether they came from a tap or a chip, so the goal —
+fully hands-off timing with per-lap splits — is an added input, not a rewrite.
+
+Underneath that is one rule: **the network is never in the timing path.** A
+track rarely has good signal, so every tap is saved on the phone first and
+published afterwards. Losing signal mid-heat loses nothing.
+
+## How that shows up in the code
 
 **Local-first:** every tap writes to `localStorage` synchronously, so timing
-never depends on the network. Supabase is a downstream publisher, not the
-source of truth. Kill the signal mid-heat and nothing is lost.
+never waits on the network. Supabase is a downstream publisher, not the source
+of truth. A service worker caches the app itself, so it also reloads with no
+signal.
 
 **RFID-ready:** the crossings log is append-only with a `source` field
-(`tap` | `rfid` | `manual`). A future RFID bridge writes crossings with
-`source:'rfid'` into the exact same shape — every screen already understands
-them. No rework needed to add hands-off chip timing later.
+(`tap` | `rfid` | `manual`). An RFID bridge writes crossings with
+`source:'rfid'` into the exact same shape, and every screen already
+understands them.
 
 **Corrections never delete.** A mis-tap is voided, not removed, so the log
-stays auditable and lap numbers are re-derived from chronological order at read
-time.
+stays auditable and can be reconciled against chip data. Lap numbers are
+re-derived from chronological order when read, so voiding one lap renumbers the
+ones after it.
 
 ## Run locally
 
