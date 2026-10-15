@@ -98,7 +98,7 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
               rows={5}
               value={pasteText}
               onChange={(e) => setPasteText(e.target.value)}
-              placeholder={'14, Ola Nordmann, OSI\n27, Kari Berg, BUL\n33, Jonas H.'}
+              placeholder={'14, Ola Nordmann, OSI\n27, Kari Berg, BUL\n33, Per Hansen'}
             />
             <button className="btn block" style={{ marginTop: 10 }} onClick={usePaste}>
               Use pasted rows
