@@ -1,6 +1,9 @@
 /* Self-hosted fonts, shared with beermilenorge.no (copied from the site's
    public/fonts). Anton = display slam (wordmark, bibs, clock, ranks).
-   Barlow Condensed = UI voice. */
+   Barlow Condensed = UI voice.
+
+   Both are SIL Open Font License 1.1. The OFL requires the license text to
+   travel with the font files, so it lives beside them in public/fonts/. */
 @font-face {
   font-family: 'Anton';
   font-style: normal;
