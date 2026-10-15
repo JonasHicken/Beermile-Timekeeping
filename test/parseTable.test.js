@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import * as XLSX from 'xlsx'
 import {
-  detectDelimiter, parseDelimited, guessMapping, toRunnerRows, looksLikeHeader,
+  detectDelimiter, parseDelimited, guessMapping, toRunnerRows, looksLikeHeader, parseFile,
 } from '../src/lib/parseTable.js'
 
 const parse = (text) => parseDelimited(text, detectDelimiter(text))
@@ -79,5 +80,35 @@ describe('toRunnerRows', () => {
       { bib: '14', name: 'Ola', club: '', category: '', email: '' },
       { bib: '27', name: 'Kari', club: '', category: '', email: '' },
     ])
+  })
+})
+
+describe('parseFile', () => {
+  // A real workbook built in memory, so an xlsx upgrade that changes how
+  // sheets are read fails here rather than at the registration desk.
+  function workbook(rows) {
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Startliste')
+    const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+    return new File([buf], 'startliste.xlsx')
+  }
+
+  it('reads an Excel start list, turning numeric bibs into text', async () => {
+    const rows = await parseFile(workbook([
+      ['Startnr', 'Navn', 'Klubb'],
+      [14, 'Nordmann, Ola', 'OSI'],
+      [],
+      [27, 'Kari Berg', 'BUL'],
+    ]))
+    expect(rows).toEqual([
+      ['Startnr', 'Navn', 'Klubb'],
+      ['14', 'Nordmann, Ola', 'OSI'],
+      ['27', 'Kari Berg', 'BUL'],
+    ])
+  })
+
+  it('reads a CSV file through the same entry point', async () => {
+    const rows = await parseFile(new File(['Nr;Navn\n14;Ola'], 'liste.csv'))
+    expect(rows).toEqual([['Nr', 'Navn'], ['14', 'Ola']])
   })
 })
