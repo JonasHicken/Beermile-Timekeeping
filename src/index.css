@@ -360,6 +360,18 @@ input:focus, select:focus, textarea:focus {
 }
 .heat-select.unassigned { color: var(--muted); }
 
+/* On a phone in portrait the start-list row has ~320px to share, and at the
+   desktop sizes above the bib, heat picker and remove button took 270 of it,
+   leaving the name 47px ("Ola N"). Tighten everything around the name, which
+   is the field that actually needs the room. */
+@media (max-width: 480px) {
+  .list .item:has(.heat-select) { gap: 6px; padding: 10px 10px 10px 12px; }
+  .bib-edit { width: 52px; padding: 6px 4px; }
+  .name-edit { font-size: 17px; padding: 6px 4px; }
+  .heat-select { min-width: 0; padding: 7px 8px; font-size: 13px; letter-spacing: 0.02em; }
+  .row-remove { padding: 10px 8px; min-width: 36px; }
+}
+
 /* Looks like the heading it is until you touch it, then obviously an input. */
 .heat-name {
   font-family: var(--display);

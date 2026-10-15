@@ -202,7 +202,7 @@ export default function Setup() {
                 <option key={h.id} value={h.id}>{h.name}</option>
               ))}
             </select>
-            {!online && <button className="btn ghost danger" onClick={() => removeRunner(r.id)} aria-label="Remove">✕</button>}
+            {!online && <button className="btn ghost danger row-remove" onClick={() => removeRunner(r.id)} aria-label="Remove">✕</button>}
           </div>
         ))}
       </div>
