@@ -4,3 +4,7 @@ dist
 .env.local
 *.local
 .DS_Store
+
+# Local dev tooling (editor / Claude Code launchers), not part of the app
+.claude/
+start-timing.bat

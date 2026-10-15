@@ -1,10 +1,21 @@
 # Beermile Timekeeping
 
+[![Test](https://github.com/JonasHicken/Beermile-Timekeeping/actions/workflows/test.yml/badge.svg)](https://github.com/JonasHicken/Beermile-Timekeeping/actions/workflows/test.yml)
+
 > **🚧 Still in development.** The core works end to end and runs offline, but
 > it has not yet timed a real race. Expect rough edges and breaking changes to
 > the data format until it has.
 
 Mobile-first race timing for beer miles. **Tap timing, live results, RFID-ready.**
+
+<p align="center">
+  <img src="docs/screenshots/timing.png" width="250" alt="Timing a heat: one tile per runner, laps filling in as they are tapped">
+  &nbsp;
+  <img src="docs/screenshots/results.png" width="250" alt="Live results: ranked finish times with every lap split">
+  &nbsp;
+  <img src="docs/screenshots/setup.png" width="250" alt="Setup: the start list, with each runner's heat picked inline">
+</p>
+<p align="center"><sub>Timing a heat &nbsp;·&nbsp; Live results with splits &nbsp;·&nbsp; Start list and heats</sub></p>
 
 ## What it's for
 
@@ -75,6 +86,18 @@ tap tiles as runners cross → **Results**.
 
 Works offline with zero configuration. Data lives in your browser.
 
+### Tests
+
+```bash
+npm test
+```
+
+The suite covers the rules a timing app can't get wrong: lap counting and the
+duplicate-tap window, voiding a lap and renumbering the ones after it,
+penalty laps, standings, start-list import (Norwegian semicolon CSVs, quoted
+names, duplicate bibs), persistence across a reload, and how shared races
+queue and reconcile changes between phones. It runs on every push.
+
 ## Shared races (several phones, one race)
 
 A race can be timed by more than one phone at once. Each phone opens the same
@@ -121,6 +144,7 @@ every entrant's address.
 | `src/pages/Review.jsx` | Chronological crossing log + corrections |
 | `src/pages/Live.jsx` | Standings + splits |
 | `src/pages/Join.jsx` | Joining a shared race from a timing link |
+| `test/` | Vitest suite for the store, file parsing and time handling |
 | `supabase/schema.sql` | `tk_*` tables, RLS (public read, no anon write) |
 
 ## Licence
