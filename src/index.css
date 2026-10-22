@@ -360,6 +360,9 @@ input:focus, select:focus, textarea:focus {
 }
 .heat-select.unassigned { color: var(--muted); }
 
+/* Adding a heat by hand sits after the heats it adds to. */
+.add-heat { margin-top: 10px; border: 1.5px dashed var(--line-strong); border-radius: var(--radius); }
+
 /* On a phone in portrait the start-list row has ~320px to share, and at the
    desktop sizes above the bib, heat picker and remove button took 270 of it,
    leaving the name 47px ("Ola N"). Tighten everything around the name, which
@@ -489,6 +492,37 @@ input:focus, select:focus, textarea:focus {
   margin-top: 10px;
   line-height: 1;
 }
+.tile .t-pen {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--red);
+  background: var(--red-soft);
+  border-radius: 6px;
+  padding: 2px 5px;
+  margin-left: 6px;
+  vertical-align: 4px;
+}
+.tile.flash .t-pen { color: var(--amber-ink); background: rgba(17, 17, 17, 0.15); }
+
+/* A beer-mile heat is 25-30 runners, and at the default size a phone shows
+   eight tiles: four screens of scrolling while people cross the line. Heats
+   bigger than a dozen get three narrower columns, which roughly doubles what
+   fits, while each tile stays well above a thumb-sized target (~100x80). */
+.grid.dense {
+  grid-template-columns: repeat(auto-fill, minmax(98px, 1fr));
+  gap: 8px;
+}
+.grid.dense .tile { min-height: 76px; padding: 9px 10px 10px; border-radius: 12px; }
+.grid.dense .tile .t-bib { font-size: 25px; }
+.grid.dense .tile .t-more { font-size: 17px; padding: 2px 4px; margin: -4px -5px 0 0; }
+.grid.dense .tile .t-name { font-size: 12px; margin-top: 3px; }
+.grid.dense .tile .t-laps { gap: 3px; margin-top: 8px; }
+.grid.dense .tile .lap-dot { height: 5px; }
+.grid.dense .tile .t-final { font-size: 17px; margin-top: 7px; }
+.grid.dense .tile .t-status { font-size: 12px; margin-top: 8px; }
+.grid.dense .tile .t-pen { font-size: 10px; padding: 1px 4px; margin-left: 4px; }
+
 .tile .t-status {
   font-size: 14px;
   font-weight: 700;
@@ -542,11 +576,29 @@ input:focus, select:focus, textarea:focus {
 .results td.time { font-weight: 700; font-size: 18px; }
 .results .r-name { font-size: 18px; font-weight: 500; }
 .results .splits { color: var(--muted); font-size: 13px; margin-top: 2px; }
+.results .r-club { color: var(--muted); font-size: 14px; font-weight: 500; }
+.results .r-pen {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  color: var(--red);
+  background: var(--red-soft);
+  vertical-align: 2px;
+}
+.chips + .chips { margin-top: -6px; }
 
 .toast {
   position: fixed;
   left: 50%;
-  bottom: calc(24px + env(safe-area-inset-bottom));
+  /* Clear of the action bar: the toast confirms a tap, and the moment after a
+     tap is exactly when Undo is wanted, so it must never sit on top of it. It
+     also lets taps through, so a tile under it can still be hit. */
+  bottom: calc(104px + env(safe-area-inset-bottom));
+  pointer-events: none;
   transform: translateX(-50%);
   background: #111111;
   color: var(--amber);
@@ -791,3 +843,5 @@ input:focus, select:focus, textarea:focus {
 @media (prefers-reduced-motion: reduce) {
   .tile, .btn, .sheet, .sheet-backdrop { transition: none; animation: none; }
 }
+
+.nowrap { white-space: nowrap; }

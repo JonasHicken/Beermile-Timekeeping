@@ -26,7 +26,10 @@ export default function Home() {
         <img className="mark" src="/logo.png" alt="" width="60" height="56" />
         <div>
           <h1>Beermile <span className="accent">Timekeeping</span></h1>
-          <div className="sub">Tap timing · Live results · RFID-ready</div>
+          {/* Each phrase stays whole; on a phone the line wrapped inside "RFID-ready". */}
+          <div className="sub">
+            <span className="nowrap">Tap timing</span> · <span className="nowrap">Live results</span> · <span className="nowrap">RFID-ready</span>
+          </div>
         </div>
       </div>
 

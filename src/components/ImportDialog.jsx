@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { parseFile, parseDelimited, detectDelimiter, guessMapping, toRunnerRows } from '../lib/parseTable.js'
-import { importRunnerRows } from '../lib/store.js'
+import { useStore, runnersInEvent, importRunnerRows, classifyImport } from '../lib/store.js'
 
 const FIELDS = [
   { key: 'bib', label: 'Bib', required: true },
@@ -23,6 +23,7 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const fileRef = useRef(null)
+  const existingBibs = useStore((s) => runnersInEvent(s, eventId).map((r) => r.bib))
 
   function ingest(parsed, label) {
     if (!parsed.length) { setError('That file had no readable rows.'); return }
@@ -54,7 +55,10 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
   }
 
   const preview = rows && mapping ? toRunnerRows(rows, mapping, hasHeader) : []
-  const canImport = preview.length > 0 && mapping?.bib >= 0
+  // The same check the import itself runs, so the numbers here are the truth.
+  const plan = classifyImport(preview, replace ? [] : existingBibs)
+  const skipped = plan.duplicates.length + plan.missingBib.length
+  const canImport = plan.ok.length > 0 && mapping?.bib >= 0
 
   function doImport() {
     const result = importRunnerRows(eventId, preview, { replace })
@@ -147,8 +151,26 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
             {preview.length > 0 && (
               <>
                 <span className="label" style={{ marginTop: 18 }}>
-                  Preview · {preview.length} runners
+                  Preview · {plan.ok.length} runners
                 </span>
+                {skipped > 0 && (
+                  <div className="form-error" style={{ marginBottom: 10 }}>
+                    {plan.duplicates.length > 0 && (
+                      <div>
+                        {plan.duplicates.length} will be skipped: bib already used
+                        ({[...new Set(plan.duplicates.map((d) => d.bib))].slice(0, 6).join(', ')}
+                        {plan.duplicates.length > 6 ? '…' : ''}).
+                      </div>
+                    )}
+                    {plan.missingBib.length > 0 && (
+                      <div>
+                        {plan.missingBib.length} will be skipped: no bib number
+                        ({plan.missingBib.slice(0, 3).map((r) => r.name || 'unnamed').join(', ')}
+                        {plan.missingBib.length > 3 ? '…' : ''}).
+                      </div>
+                    )}
+                  </div>
+                )}
                 <div className="list">
                   {preview.slice(0, 4).map((r, i) => (
                     <div className="item" key={i}>
@@ -185,7 +207,7 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
                 Back
               </button>
               <button className="btn primary grow" disabled={!canImport} onClick={doImport}>
-                Import {preview.length}
+                Import {plan.ok.length}
               </button>
             </div>
           </>

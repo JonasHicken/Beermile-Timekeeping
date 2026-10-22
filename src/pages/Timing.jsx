@@ -198,9 +198,13 @@ export default function Timing() {
               </button>
             )}
             <div className="spacer" />
-            <button className={`btn sm${picking ? ' primary' : ' ghost'}`} onClick={() => { setPicking((v) => !v); if (picking && mineCount) setOnlyMine(true) }}>
-              {picking ? 'Done' : 'Choose mine'}
-            </button>
+            {/* "Mine" splits a heat between several phones, which only exists
+                in a shared race; on one phone it was a row of dead space. */}
+            {online && (
+              <button className={`btn sm${picking ? ' primary' : ' ghost'}`} onClick={() => { setPicking((v) => !v); if (picking && mineCount) setOnlyMine(true) }}>
+                {picking ? 'Done' : 'Choose mine'}
+              </button>
+            )}
           </div>
           {picking && (
             <div className="muted tiny" style={{ marginTop: 6 }}>
@@ -208,7 +212,7 @@ export default function Timing() {
             </div>
           )}
 
-          <div className="grid" style={{ marginTop: 14 }}>
+          <div className={`grid${runners.length > 12 ? ' dense' : ''}`} style={{ marginTop: 14 }}>
             {visible.map((row) => (
               <RunnerTile
                 key={row.runner.id}
@@ -315,7 +319,10 @@ function RunnerTile({ row, flash, elapsed, disabled, picking, isMine, onTap, onD
       aria-disabled={disabled && !finished}
     >
       <div className="row" style={{ alignItems: 'flex-start', gap: 6 }}>
-        <span className="t-bib grow">{runner.bib}</span>
+        <span className="t-bib grow">
+          {runner.bib}
+          {runner.penaltyLaps > 0 && <span className="t-pen">+{runner.penaltyLaps}</span>}
+        </span>
         <button
           className="t-more"
           onClick={(e) => { e.stopPropagation(); onDetail() }}

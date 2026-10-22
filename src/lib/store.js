@@ -377,20 +377,29 @@ export function importRunners(eventId, text) {
 // Bulk import from a parsed file. Reports what it skipped rather than silently
 // dropping rows — a start list that quietly loses three runners is worse than
 // one that refuses to import.
-export function importRunnerRows(eventId, rows, { replace = false } = {}) {
-  const existing = replace ? [] : runnersInEvent(state, eventId)
-  const taken = new Set(existing.map((r) => String(r.bib)))
-  const added = []
+//
+// classifyImport is the pure half, so the import dialog can show exactly what
+// will be skipped before anything is written. `takenBibs` is the bibs already
+// in the event (empty when replacing).
+export function classifyImport(rows, takenBibs = []) {
+  const taken = new Set([...takenBibs].map(String))
+  const ok = []
   const duplicates = []
   const missingBib = []
-
   for (const row of rows) {
     const bib = String(row.bib ?? '').trim()
     if (!bib) { missingBib.push(row); continue }
     if (taken.has(bib)) { duplicates.push(row); continue }
     taken.add(bib)
-    added.push(newRunner(eventId, row))
+    ok.push(row)
   }
+  return { ok, duplicates, missingBib }
+}
+
+export function importRunnerRows(eventId, rows, { replace = false } = {}) {
+  const existing = replace ? [] : runnersInEvent(state, eventId)
+  const { ok, duplicates, missingBib } = classifyImport(rows, existing.map((r) => r.bib))
+  const added = ok.map((row) => newRunner(eventId, row))
 
   const others = replace
     ? state.runners.filter((r) => r.eventId !== eventId)
@@ -442,7 +451,9 @@ export function assignRunner(runnerId, heatId) {
   updateRunner(runnerId, { heatId })
 }
 
-// Split all runners into heats of `size`, in bib order.
+// Split all runners into heats of at most `size`, in bib order. The field is
+// spread evenly rather than filled heat by heat: 28 runners at 12 per heat is
+// 10/9/9, not 12/12/4, which would send four people round on their own.
 export function autoSplitHeats(eventId, size = 12) {
   const runners = runnersInEvent(state, eventId)
   const heatCount = Math.max(1, Math.ceil(runners.length / size))
@@ -459,8 +470,12 @@ export function autoSplitHeats(eventId, size = 12) {
     })
   }
   const assignment = {}
-  runners.forEach((r, i) => {
-    assignment[r.id] = newHeats[Math.floor(i / size)].id
+  const base = Math.floor(runners.length / heatCount)
+  const extra = runners.length % heatCount // the first `extra` heats take one more
+  let i = 0
+  newHeats.forEach((h, k) => {
+    const n = base + (k < extra ? 1 : 0)
+    for (let j = 0; j < n; j++) assignment[runners[i++].id] = h.id
   })
   commit({
     ...state,

@@ -194,16 +194,27 @@ describe('start list', () => {
     expect(S.runnersInEvent(state(), ev.id).map((r) => r.bib)).toEqual(['1', '9', '10', '100'])
   })
 
-  it('auto-split fills heats in bib order', () => {
+  it('auto-split spreads the field evenly, in bib order', () => {
     const ev = S.createEvent({ name: 'Test' })
-    for (let i = 25; i >= 1; i--) S.addRunner(ev.id, { bib: String(i) })
+    for (let i = 28; i >= 1; i--) S.addRunner(ev.id, { bib: String(i) })
 
     const heats = S.autoSplitHeats(ev.id, 12)
     const bibsIn = (h) => S.runnersInHeat(state(), h.id).map((r) => Number(r.bib))
 
-    expect(heats).toHaveLength(3)
-    expect(bibsIn(heats[0])).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12])
-    expect(bibsIn(heats[2])).toEqual([25])
+    // 10/9/9, not 12/12/4.
+    expect(heats.map((h) => bibsIn(h).length)).toEqual([10, 9, 9])
+    expect(bibsIn(heats[0])).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    expect(bibsIn(heats[2])).toEqual([20, 21, 22, 23, 24, 25, 26, 27, 28])
+  })
+
+  it('auto-split never exceeds the heat size and fills exact multiples fully', () => {
+    const ev = S.createEvent({ name: 'Test' })
+    for (let i = 1; i <= 24; i++) S.addRunner(ev.id, { bib: String(i) })
+    const sizes = (n) => S.autoSplitHeats(ev.id, n).map((h) => S.runnersInHeat(state(), h.id).length)
+
+    expect(sizes(12)).toEqual([12, 12])
+    expect(sizes(30)).toEqual([24])
+    expect(sizes(5)).toEqual([5, 5, 5, 5, 4])
   })
 })
 

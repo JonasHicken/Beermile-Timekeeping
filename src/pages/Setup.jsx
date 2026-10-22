@@ -26,6 +26,10 @@ export default function Setup() {
   // the row leaps down the page mid-edit (2 -> 25 moved it eight places). Hold
   // the order still while a bib field has focus, and re-sort once it's done.
   const [frozenIds, setFrozenIds] = useState(null)
+  // Once heats exist, Setup is mostly about the heats, and a 28-row start list
+  // above them pushes "Open timing" a long scroll away. Collapse it then;
+  // null means "follow the default", so an explicit choice sticks.
+  const [listOpen, setListOpen] = useState(null)
   const [confirmNode, askConfirm] = useConfirm()
   // An event opened from a timing link is shared with other phones; its start
   // list and heats are set in the admin portal, so here they are read-only.
@@ -42,6 +46,29 @@ export default function Setup() {
   }
 
   const assignedCount = runners.filter((r) => r.heatId).length
+  const timedCount = useStore((s) => s.crossings.filter((c) => c.eventId === eventId).length)
+  const showList = listOpen ?? !(heats.length > 0 && runners.length > 10)
+
+  // Splitting only needs a confirmation when it would throw something away:
+  // existing heats (and the runners' places in them), or recorded timing.
+  function split() {
+    if (!runners.length) return
+    if (!heats.length) { autoSplitHeats(eventId, heatSize); return }
+    askConfirm(timedCount
+      ? {
+          title: 'Re-split all heats?',
+          body: `Rebuilds every heat from scratch in bib order, and deletes the ${timedCount} laps already recorded for this event.`,
+          confirmLabel: 'Re-split and delete laps',
+          danger: true,
+          onConfirm: () => autoSplitHeats(eventId, heatSize),
+        }
+      : {
+          title: 'Re-split all heats?',
+          body: 'Rebuilds every heat from scratch in bib order. Any heats you set by hand are replaced.',
+          confirmLabel: 'Re-split',
+          onConfirm: () => autoSplitHeats(eventId, heatSize),
+        })
+  }
 
   // Frozen order, with any runner added meanwhile appended rather than dropped.
   const displayRunners = frozenIds
@@ -112,23 +139,45 @@ export default function Setup() {
       )}
 
       {/* --- Start list --- */}
-      <h2 style={{ marginTop: 28, marginBottom: 12, fontSize: 16 }}>
-        Start list <span className="muted">· {runners.length}</span>
-      </h2>
+      <div className="row" style={{ marginTop: 28, marginBottom: 12, alignItems: 'baseline' }}>
+        <h2 style={{ margin: 0, fontSize: 16 }}>
+          Start list <span className="muted">· {runners.length}</span>
+        </h2>
+        <div className="spacer" />
+        {runners.length > 0 && (
+          <button className="btn ghost sm" onClick={() => setListOpen(!showList)} aria-expanded={showList}>
+            {showList ? 'Hide' : `Show all ${runners.length}`}
+          </button>
+        )}
+      </div>
 
-      {!online && <>
+      {!online && runners.length === 0 && (
+        <div className="card stack center" style={{ padding: 22, marginBottom: 14 }}>
+          <div className="display" style={{ fontSize: 20 }}>Add your runners</div>
+          <div className="muted" style={{ fontSize: 15 }}>
+            Import the start list from Excel or a CSV file, or paste it. You can also add runners one by one below.
+          </div>
+          <button className="btn primary block" onClick={() => setShowImport(true)}>
+            Import start list
+          </button>
+        </div>
+      )}
+
+      {!online && showList && <>
       <form className="row" onSubmit={quickAdd}>
         <input id="bibInput" style={{ width: 92 }} inputMode="numeric" placeholder="Bib"
           value={bib} onChange={(e) => setBib(e.target.value)} />
         <input className="grow" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-        <button type="submit" className="btn primary">Add</button>
+        <button type="submit" className={`btn${runners.length ? ' primary' : ''}`}>Add</button>
       </form>
 
-      <div className="row" style={{ marginTop: 10 }}>
-        <button className="btn ghost grow" onClick={() => setShowImport(true)}>
-          Import from file
-        </button>
-      </div>
+      {runners.length > 0 && (
+        <div className="row" style={{ marginTop: 10 }}>
+          <button className="btn ghost grow" onClick={() => setShowImport(true)}>
+            Import from file
+          </button>
+        </div>
+      )}
       </>}
 
       {importReport && (
@@ -164,6 +213,7 @@ export default function Setup() {
         />
       )}
 
+      {showList && (
       <div className="list" style={{ marginTop: 14 }}>
         {displayRunners.map((r) => (
           <div className="item" key={r.id}>
@@ -206,14 +256,16 @@ export default function Setup() {
           </div>
         ))}
       </div>
+      )}
 
       {/* --- Heats --- */}
+      {(runners.length > 0 || heats.length > 0) && <>
       <h2 style={{ marginTop: 28, marginBottom: 4, fontSize: 16 }}>Heats</h2>
       <p className="muted tiny" style={{ marginTop: 0 }}>
         {assignedCount}/{runners.length} runners assigned.{' '}
         {online
           ? 'Heats are set by the organiser.'
-          : 'Auto-split fills heats in bib order, or set each runner’s heat in the start list above. Tap a heat’s name to rename it.'}
+          : 'Auto-split spreads runners evenly over as few heats as fit, in bib order. Or set each runner’s heat in the start list. Tap a heat’s name to rename it.'}
       </p>
 
       {!online && (
@@ -223,19 +275,9 @@ export default function Setup() {
           <input type="number" min="1" max="60" inputMode="numeric" value={heatSize}
             onChange={(e) => setHeatSize(Number(e.target.value) || 1)} />
         </div>
-        <button className="btn"
-          onClick={() =>
-            runners.length && askConfirm({
-              title: 'Re-split all heats?',
-              body: 'Rebuilds every heat from scratch in bib order, and clears any timing already recorded for this event.',
-              confirmLabel: 'Re-split',
-              danger: true,
-              onConfirm: () => autoSplitHeats(eventId, heatSize),
-            })
-          }>
-          Auto-split
+        <button className={`btn${heats.length ? '' : ' primary'}`} onClick={split}>
+          {heats.length ? 'Re-split' : 'Auto-split'}
         </button>
-        <button className="btn ghost" onClick={() => createHeat(eventId)}>+ Empty heat</button>
       </div>
       )}
 
@@ -246,6 +288,9 @@ export default function Setup() {
             onTime={() => nav(`/event/${eventId}/heat/${h.id}`)} />
         ))}
       </div>
+      {!online && (
+        <button className="btn ghost block add-heat" onClick={() => createHeat(eventId)}>+ Add a heat</button>
+      )}
       {heats.length === 0 && (
         <div className="empty">
           <div className="display">No heats yet</div>
@@ -253,6 +298,7 @@ export default function Setup() {
           runners to it from the start list.
         </div>
       )}
+      </>}
 
       {confirmNode}
       <div style={{ height: 24 }} />

@@ -9,6 +9,7 @@ export default function Live() {
   const data = useStore((s) => standings(s, eventId))
   const heats = useStore((s) => heatsInEvent(s, eventId))
   const [heatFilter, setHeatFilter] = useState('all')
+  const [classFilter, setClassFilter] = useState('all')
   const [copied, setCopied] = useState(false)
   useOnlineSync(eventId, Boolean(data.event?.online))
 
@@ -23,19 +24,22 @@ export default function Live() {
     )
   }
 
-  const byHeat = (r) => heatFilter === 'all' || r.heat?.id === heatFilter
-  // Re-rank within a heat filter so places read 1..n for that heat.
-  const shownFinishers = finishers.filter(byHeat).map((r, i) => ({
-    ...r,
-    shownRank: heatFilter === 'all' ? r.rank : i + 1,
-  }))
-  const shownProgress = inProgress.filter(byHeat)
-  const shownDnf = didNotFinish.filter(byHeat)
+  // Classes come from the start list's category column (e.g. Herrer/Damer).
+  // A championship ranks each class on its own, so they get their own filter.
+  const classes = [...new Set([...finishers, ...inProgress, ...didNotFinish, ...notStarted]
+    .map((r) => r.runner.category).filter(Boolean))].sort()
+
+  const shown = (r) =>
+    (heatFilter === 'all' || r.heat?.id === heatFilter) &&
+    (classFilter === 'all' || r.runner.category === classFilter)
+  const shownFinishers = withPlaces(finishers.filter(shown))
+  const shownProgress = inProgress.filter(shown)
+  const shownDnf = didNotFinish.filter(shown)
 
   const anyRunning = shownProgress.length > 0
 
   function exportCsv() {
-    const head = ['Place', 'Bib', 'Name', 'Category', 'Heat', 'Status', 'Time', 'Splits']
+    const head = ['Place', 'Bib', 'Name', 'Club', 'Category', 'Heat', 'Status', 'Time', 'Penalty laps', 'Splits']
     const esc = (v) => {
       const s = String(v ?? '')
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
@@ -43,14 +47,14 @@ export default function Live() {
     const lines = [head.join(',')]
     for (const r of shownFinishers) {
       lines.push([
-        r.shownRank, r.runner.bib, r.runner.name, r.runner.category,
-        r.heat?.name ?? '', 'FIN', fmt(r.elapsed),
+        r.shownRank, r.runner.bib, r.runner.name, r.runner.club, r.runner.category,
+        r.heat?.name ?? '', 'FIN', fmt(r.elapsed), r.runner.penaltyLaps || '',
         r.laps.map((l) => fmtShort(l.split)).join(' | '),
       ].map(esc).join(','))
     }
     for (const r of shownDnf) {
-      lines.push(['', r.runner.bib, r.runner.name, r.runner.category,
-        r.heat?.name ?? '', r.status.toUpperCase(), '', ''].map(esc).join(','))
+      lines.push(['', r.runner.bib, r.runner.name, r.runner.club, r.runner.category,
+        r.heat?.name ?? '', r.status.toUpperCase(), '', r.runner.penaltyLaps || '', ''].map(esc).join(','))
     }
     const csv = lines.join('\n')
     navigator.clipboard?.writeText(csv).then(
@@ -95,6 +99,19 @@ export default function Live() {
         </div>
       )}
 
+      {classes.length > 1 && (
+        <div className="chips">
+          <button className={`chip${classFilter === 'all' ? ' on' : ''}`} onClick={() => setClassFilter('all')}>
+            All classes
+          </button>
+          {classes.map((c) => (
+            <button key={c} className={`chip${classFilter === c ? ' on' : ''}`} onClick={() => setClassFilter(c)}>
+              {c}
+            </button>
+          ))}
+        </div>
+      )}
+
       {shownFinishers.length === 0 && shownProgress.length === 0 && shownDnf.length === 0 && (
         <div className="empty">
           <div className="display">No times yet</div>
@@ -116,7 +133,13 @@ export default function Live() {
               <tr key={r.runner.id}>
                 <td className="rank">{r.shownRank}</td>
                 <td>
-                  <div className="r-name"><strong>{r.runner.bib}</strong> {r.runner.name}</div>
+                  <div className="r-name">
+                    <strong>{r.runner.bib}</strong> {r.runner.name}
+                    {r.runner.club && <span className="r-club"> {r.runner.club}</span>}
+                    {r.runner.penaltyLaps > 0 && (
+                      <span className="r-pen">+{r.runner.penaltyLaps} penalty lap{r.runner.penaltyLaps > 1 ? 's' : ''}</span>
+                    )}
+                  </div>
                   <div className="splits">
                     {r.laps.map((l) => fmtShort(l.split)).join(' · ')}
                     {heatFilter === 'all' && r.heat && ` · ${r.heat.name}`}
@@ -174,4 +197,18 @@ export default function Live() {
       <div style={{ height: 24 }} />
     </div>
   )
+}
+
+// Places for a list already sorted by time. Two runners whose times read the
+// same on screen share the place (two 5:39.6 are both 3rd, the next is 5th):
+// hand timing can't honestly separate them, so the table shouldn't pretend to.
+function withPlaces(rows) {
+  let place = 0
+  let prev = null
+  return rows.map((r, i) => {
+    const shownTime = fmt(r.elapsed)
+    if (shownTime !== prev) place = i + 1
+    prev = shownTime
+    return { ...r, shownRank: place }
+  })
 }
