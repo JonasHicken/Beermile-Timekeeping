@@ -38,30 +38,41 @@ export default function Live() {
 
   const anyRunning = shownProgress.length > 0
 
-  function exportCsv() {
-    const head = ['Place', 'Bib', 'Name', 'Club', 'Category', 'Heat', 'Status', 'Time', 'Penalty laps', 'Splits']
-    const esc = (v) => {
-      const s = String(v ?? '')
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
-    }
-    const lines = [head.join(',')]
+  // Results as rows: header first, finishers, then non-finishers.
+  function resultRows() {
+    const rows = [['Place', 'Bib', 'Name', 'Club', 'Category', 'Heat', 'Status', 'Time', 'Penalty laps', 'Splits']]
     for (const r of shownFinishers) {
-      lines.push([
+      rows.push([
         r.shownRank, r.runner.bib, r.runner.name, r.runner.club, r.runner.category,
         r.heat?.name ?? '', 'FIN', fmt(r.elapsed), r.runner.penaltyLaps || '',
         r.laps.map((l) => fmtShort(l.split)).join(' | '),
-      ].map(esc).join(','))
+      ])
     }
     for (const r of shownDnf) {
-      lines.push(['', r.runner.bib, r.runner.name, r.runner.club, r.runner.category,
-        r.heat?.name ?? '', r.status.toUpperCase(), '', r.runner.penaltyLaps || '', ''].map(esc).join(','))
+      rows.push(['', r.runner.bib, r.runner.name, r.runner.club, r.runner.category,
+        r.heat?.name ?? '', r.status.toUpperCase(), '', r.runner.penaltyLaps || '', ''])
     }
-    const csv = lines.join('\n')
-    navigator.clipboard?.writeText(csv).then(
+    return rows
+  }
+
+  // Written for Excel in Norway, where it will be opened. Norwegian Excel
+  // splits CSV on semicolons (the comma is the decimal separator), so a comma
+  // file landed in column A. And without a byte-order mark Excel reads the file
+  // as Windows-1252, turning "Bø" into "BÃ¸". The clipboard copy is
+  // tab-separated, which pastes into separate columns in any Excel or Sheets.
+  function exportCsv() {
+    const rows = resultRows()
+    const esc = (v) => {
+      const s = String(v ?? '')
+      return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const csv = rows.map((r) => r.map(esc).join(';')).join('\r\n')
+    const tsv = rows.map((r) => r.map((v) => String(v ?? '').replace(/[\t\r\n]+/g, ' ')).join('\t')).join('\n')
+    navigator.clipboard?.writeText(tsv).then(
       () => { setCopied(true); setTimeout(() => setCopied(false), 1600) },
       () => {},
     )
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob)
     a.download = `${event.name.replace(/[^\w-]+/g, '_')}_results.csv`
@@ -79,7 +90,7 @@ export default function Live() {
 
       <h1 style={{ margin: 0, fontSize: 28 }}>{event.name}</h1>
       <div className="muted tiny" style={{ textTransform: 'uppercase', letterSpacing: '.08em', marginTop: 6, marginBottom: 16 }}>
-        {event.date} · {event.numLaps} laps · {shownFinishers.length} finished
+        {event.date} · {event.numLaps} {event.numLaps === 1 ? 'lap' : 'laps'} · {shownFinishers.length} finished
       </div>
 
       {heats.length > 1 && (

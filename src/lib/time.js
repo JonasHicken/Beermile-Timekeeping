@@ -3,16 +3,16 @@
 // which matters far more here than immunity to a wall-clock adjustment during
 // a 10-minute heat. Elapsed = capturedAt - heat.startedAt.
 
-// mm:ss.d  (one decimal) — the readable race format
+// mm:ss.d  (one decimal) — the readable race format. Worked in whole tenths:
+// in floating point 194.7 - 180 is 14.6999…, so a time typed as 3:14.7 used
+// to come back as 3:14.6.
 export function fmt(ms) {
   if (ms == null || Number.isNaN(ms)) return '—'
   const neg = ms < 0
-  let s = Math.abs(ms) / 1000
-  const m = Math.floor(s / 60)
-  s -= m * 60
-  const whole = Math.floor(s)
-  const tenth = Math.floor((s - whole) * 10)
-  const out = `${m}:${String(whole).padStart(2, '0')}.${tenth}`
+  const tenths = Math.floor(Math.abs(ms) / 100)
+  const m = Math.floor(tenths / 600)
+  const s = Math.floor((tenths % 600) / 10)
+  const out = `${m}:${String(s).padStart(2, '0')}.${tenths % 10}`
   return neg ? `-${out}` : out
 }
 
@@ -57,19 +57,4 @@ export function noteServerTime(serverMs, sentAt, receivedAt) {
     clock = { offset: Math.round(serverMs - (sentAt + receivedAt) / 2), rtt, at: Date.now() }
     try { localStorage.setItem(OFFSET_KEY, JSON.stringify(clock)) } catch { /* see above */ }
   }
-}
-
-// Parse "m:ss.d" / "m:ss" / "ss" back into milliseconds. Returns null if the
-// string isn't a usable time, so callers can reject the edit rather than
-// silently writing NaN into a crossing.
-export function parseElapsed(str) {
-  const t = String(str).trim()
-  if (!t) return null
-  const m = t.match(/^(?:(\d+):)?(\d{1,2})(?:[.,](\d{1,3}))?$/)
-  if (!m) return null
-  const mins = m[1] ? Number(m[1]) : 0
-  const secs = Number(m[2])
-  if (secs > 59 && m[1]) return null
-  const frac = m[3] ? Number(m[3].padEnd(3, '0')) : 0
-  return mins * 60000 + secs * 1000 + frac
 }

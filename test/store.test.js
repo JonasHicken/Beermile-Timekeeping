@@ -49,13 +49,40 @@ describe('recording laps', () => {
     expect(S.lapCount(state(), heat.id, r.id)).toBe(2)
   })
 
-  it('treats a second tap inside the duplicate window as the same crossing', () => {
+  it('treats a second tap inside the duplicate window as the same crossing, but keeps it', () => {
     const { heat, runners: [r] } = race(['7'])
-    S.recordCrossing(heat.id, r.id, 'tap', sec(60))
+    const first = S.recordCrossing(heat.id, r.id, 'tap', sec(60))
     const again = S.recordCrossing(heat.id, r.id, 'tap', sec(65))
 
-    expect(again.duplicate).toBe(true)
-    expect(state().crossings).toHaveLength(1)
+    expect(again).toMatchObject({ duplicate: true, prevId: first.id, void: true, rejected: 'duplicate' })
+    expect(S.lapCount(state(), heat.id, r.id)).toBe(1)
+    // Not lost: it is in the log, struck through, for the timer to use.
+    expect(S.allCrossingsInHeat(state(), heat.id)).toHaveLength(2)
+  })
+
+  it('a mis-tap followed by the real crossing is fixed in one step', () => {
+    const { heat, runners: [r] } = race(['8'])
+    const mistap = S.recordCrossing(heat.id, r.id, 'tap', sec(70))
+    const real = S.recordCrossing(heat.id, r.id, 'tap', sec(80))
+    expect(real.duplicate).toBe(true)
+
+    S.acceptRejectedTap(real.id)
+    const laps = S.crossingsForRunner(state(), heat.id, r.id)
+    expect(laps.map((c) => c.id)).toEqual([real.id])
+    expect(S.allCrossingsInHeat(state(), heat.id).find((c) => c.id === mistap.id).void).toBe(true)
+  })
+
+  it('holds back a lap faster than any real one until the timer confirms it', () => {
+    const { heat, runners: [r] } = race(['7'])
+    const bump = S.recordCrossing(heat.id, r.id, 'tap', sec(3))
+    expect(bump).toMatchObject({ tooSoon: true, void: true, rejected: 'too-soon' })
+    expect(S.lapCount(state(), heat.id, r.id)).toBe(0)
+
+    S.acceptRejectedTap(bump.id)
+    expect(S.lapCount(state(), heat.id, r.id)).toBe(1)
+    // Measured from the runner's previous lap after the first.
+    expect(S.recordCrossing(heat.id, r.id, 'tap', sec(30)).tooSoon).toBe(true)
+    expect(S.recordCrossing(heat.id, r.id, 'tap', sec(30), { force: true }).tooSoon).toBeUndefined()
   })
 
   it('tags each crossing with its source, so RFID reads share the log', () => {
@@ -98,6 +125,21 @@ describe('corrections', () => {
     expect(S.lapCount(state(), heat.id, b.id)).toBe(0)
   })
 
+  it('adds a missed lap at a typed time, in time order, and refuses nonsense', () => {
+    const { ev, heat, runners: [r] } = race(['7'])
+    S.recordCrossing(heat.id, r.id, 'tap', sec(60))
+    S.recordCrossing(heat.id, r.id, 'tap', sec(180))
+
+    const added = S.addLapAt(heat.id, r.id, sec(120))
+    expect(added.source).toBe('manual')
+    expect(result(ev, heat, r).laps.map((l) => l.split)).toEqual([60_000, 60_000, 60_000])
+
+    expect(S.addLapAt(heat.id, r.id, sec(125)).error).toMatch(/15 seconds/)
+    expect(S.addLapAt(heat.id, r.id, T0 - 1000).error).toMatch(/before the start/)
+    S.addLapAt(heat.id, r.id, sec(240))
+    expect(S.addLapAt(heat.id, r.id, sec(300)).error).toMatch(/already recorded/)
+  })
+
   it('reassigning a mistap moves the lap to the right runner and marks it manual', () => {
     const { heat, runners: [a, b] } = race(['1', '2'])
     const c = S.recordCrossing(heat.id, a.id, 'tap', sec(60))
@@ -119,6 +161,45 @@ describe('corrections', () => {
     S.resetHeat(heat.id)
     expect(S.getHeat(state(), heat.id)).toMatchObject({ status: 'pending', startedAt: null })
     expect(S.lapCount(state(), heat.id, r.id)).toBe(0)
+  })
+})
+
+describe('undo for destructive actions', () => {
+  it('removing a runner can be undone, laps included', () => {
+    const { heat, runners: [a, b] } = race(['1', '2'])
+    S.recordCrossing(heat.id, a.id, 'tap', sec(60))
+    const snap = S.removeRunner(a.id)
+    expect(S.getRunner(state(), a.id)).toBeNull()
+
+    // A lap tapped for someone else meanwhile survives the undo.
+    S.recordCrossing(heat.id, b.id, 'tap', sec(70))
+    S.restoreEvent(snap)
+    expect(S.lapCount(state(), heat.id, a.id)).toBe(1)
+    expect(S.lapCount(state(), heat.id, b.id)).toBe(1)
+  })
+
+  it('deleting a heat, resetting it and re-splitting can all be undone', () => {
+    const { ev, heat, runners: [a] } = race(['1'])
+    S.recordCrossing(heat.id, a.id, 'tap', sec(60))
+
+    S.restoreEvent(S.deleteHeat(heat.id))
+    expect(S.getRunner(state(), a.id).heatId).toBe(heat.id)
+    expect(S.lapCount(state(), heat.id, a.id)).toBe(1)
+
+    S.undoReset(S.resetHeat(heat.id))
+    expect(S.getHeat(state(), heat.id)).toMatchObject({ status: 'running', startedAt: T0 })
+    expect(S.lapCount(state(), heat.id, a.id)).toBe(1)
+
+    S.restoreEvent(S.autoSplitHeats(ev.id, 12).snap)
+    expect(S.heatsInEvent(state(), ev.id).map((h) => h.id)).toEqual([heat.id])
+  })
+
+  it('deleting the whole event can be undone', () => {
+    const { ev, heat, runners: [a] } = race(['1'])
+    S.recordCrossing(heat.id, a.id, 'tap', sec(60))
+    S.restoreEvent(S.deleteEvent(ev.id))
+    expect(S.getEvent(state(), ev.id)).not.toBeNull()
+    expect(S.lapCount(state(), heat.id, a.id)).toBe(1)
   })
 })
 
@@ -186,6 +267,14 @@ describe('start list', () => {
     expect(S.runnersInEvent(state(), ev.id).map((x) => x.bib)).toEqual(['99'])
     expect(S.heatsInEvent(state(), ev.id)).toHaveLength(0)
     expect(state().crossings).toHaveLength(0)
+  })
+
+  it('knows who already has a bib', () => {
+    const ev = S.createEvent({ name: 'Test' })
+    const a = S.addRunner(ev.id, { bib: '5', name: 'Sindre' })
+    expect(S.bibOwner(state(), ev.id, ' 5 ')?.name).toBe('Sindre')
+    expect(S.bibOwner(state(), ev.id, '5', a.id)).toBeNull()
+    expect(S.bibOwner(state(), ev.id, '')).toBeNull()
   })
 
   it('sorts bibs numerically, not as text', () => {

@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  useStore, listEvents, createEvent, deleteEvent,
+  useStore, listEvents, createEvent, deleteEvent, restoreEvent,
   runnersInEvent, heatsInEvent,
 } from '../lib/store.js'
 import { useConfirm } from '../components/Confirm.jsx'
+import { useUndo } from '../components/Undo.jsx'
 
 export default function Home() {
   const events = useStore((s) => listEvents(s))
   const nav = useNavigate()
   const [creating, setCreating] = useState(false)
   const [confirmNode, askConfirm] = useConfirm()
+  const [undoNode, offerUndo] = useUndo()
   const [name, setName] = useState('')
   const [laps, setLaps] = useState(4)
 
@@ -80,24 +82,33 @@ export default function Home() {
         {events.map((ev) => (
           <EventRow key={ev.id} ev={ev} onOpen={() => nav(`/event/${ev.id}/setup`)}
             onLive={() => nav(`/event/${ev.id}/live`)}
+            onHeat={(h) => nav(`/event/${ev.id}/heat/${h.id}`)}
             onDelete={() => askConfirm({
               title: `Delete ${ev.name}?`,
-              body: 'Removes the event, its start list, heats and every recorded time. This cannot be undone.',
+              body: 'Removes the event, its start list, heats and every recorded time. You can undo it straight after.',
               confirmLabel: 'Delete event',
               danger: true,
-              onConfirm: () => deleteEvent(ev.id),
+              onConfirm: () => {
+                const snap = deleteEvent(ev.id)
+                offerUndo(`Deleted ${ev.name}`, () => restoreEvent(snap))
+              },
             })}
           />
         ))}
       </div>
       {confirmNode}
+      {undoNode}
     </div>
   )
 }
 
-function EventRow({ ev, onOpen, onLive, onDelete }) {
+function EventRow({ ev, onOpen, onLive, onHeat, onDelete }) {
   const runners = useStore((s) => runnersInEvent(s, ev.id).length)
-  const heats = useStore((s) => heatsInEvent(s, ev.id).length)
+  const heatList = useStore((s) => heatsInEvent(s, ev.id))
+  const heats = heatList.length
+  // Coming back to the app mid-race, the running heat is the one thing you
+  // want, so the card says so and goes straight there.
+  const running = heatList.find((h) => h.status === 'running')
   return (
     <div className="event-card stack">
       <div className="row">
@@ -106,13 +117,16 @@ function EventRow({ ev, onOpen, onLive, onDelete }) {
             {ev.name} {ev.online && <span className="pill live" style={{ verticalAlign: 3 }}>Shared</span>}
           </div>
           <div className="ev-meta">
-            {ev.date} · {ev.numLaps} laps · {runners} runners · {heats} heats
+            {ev.date} · {ev.numLaps} {ev.numLaps === 1 ? 'lap' : 'laps'} · {runners} runners · {heats} {heats === 1 ? 'heat' : 'heats'}
           </div>
+          {running && <div className="running-note">● {running.name} is running</div>}
         </div>
         <button className="btn ghost danger" onClick={onDelete} aria-label="Delete">✕</button>
       </div>
       <div className="row">
-        <button className="btn grow" onClick={onOpen}>Setup / Time</button>
+        {running
+          ? <button className="btn primary grow" onClick={() => onHeat(running)}>Resume {running.name}</button>
+          : <button className="btn grow" onClick={onOpen}>Setup / Time</button>}
         <button className="btn grow" onClick={onLive}>Results</button>
       </div>
     </div>

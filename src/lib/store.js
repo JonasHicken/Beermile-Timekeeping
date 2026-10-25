@@ -173,10 +173,24 @@ export const getHeat = (s, id) => s.heats.find((h) => h.id === id) || null
 
 export const getRunner = (s, id) => s.runners.find((r) => r.id === id) || null
 
+// Who in this event already has `bib` (ignoring `exceptId`), or null. Bibs are
+// the identity on the timing screen, so two runners can never share one.
+export const bibOwner = (s, eventId, bib, exceptId = null) => {
+  const b = String(bib ?? '').trim()
+  if (!b) return null
+  return s.runners.find((r) => r.eventId === eventId && r.id !== exceptId && String(r.bib).trim() === b) || null
+}
+
 // Two taps for the same runner within this long are one crossing: no lap of a
 // beer mile is that quick, and with several phones timing one heat, two people
 // will sometimes tap the same runner. The first tap counts.
 export const DUPLICATE_MS = 15000
+
+// No one runs a beer-mile lap, beer included, in under 40 seconds (world
+// record pace is over a minute a lap). A tap sooner than that after the start
+// or the runner's previous lap is almost certainly a bumped tile, so it is
+// held back for the timer to confirm rather than counted.
+export const MIN_LAP_MS = 40000
 
 export function dedupeCrossings(sorted) {
   const last = {}
@@ -293,6 +307,7 @@ export function updateEvent(id, patch) {
 }
 
 export function deleteEvent(id) {
+  const snap = snapshotEvent(id)
   commit({
     ...state,
     events: state.events.filter((e) => e.id !== id),
@@ -300,6 +315,7 @@ export function deleteEvent(id) {
     heats: state.heats.filter((h) => h.eventId !== id),
     crossings: state.crossings.filter((c) => c.eventId !== id),
   })
+  return snap
 }
 
 const newRunner = (eventId, { bib, name, category = '', club = '', email = '' }) => ({
@@ -341,11 +357,14 @@ export function setPenaltyLaps(id, n) {
 }
 
 export function removeRunner(id) {
+  const r = getRunner(state, id)
+  const snap = r ? snapshotEvent(r.eventId) : null
   commit({
     ...state,
     runners: state.runners.filter((r) => r.id !== id),
     crossings: state.crossings.filter((c) => c.runnerId !== id),
   })
+  return snap
 }
 
 // Paste-import: one runner per line, "bib, name, category" or "bib name".
@@ -397,6 +416,7 @@ export function classifyImport(rows, takenBibs = []) {
 }
 
 export function importRunnerRows(eventId, rows, { replace = false } = {}) {
+  const snap = snapshotEvent(eventId)
   const existing = replace ? [] : runnersInEvent(state, eventId)
   const { ok, duplicates, missingBib } = classifyImport(rows, existing.map((r) => r.bib))
   const added = ok.map((row) => newRunner(eventId, row))
@@ -414,7 +434,7 @@ export function importRunnerRows(eventId, rows, { replace = false } = {}) {
     next.crossings = state.crossings.filter((c) => c.eventId !== eventId)
   }
   commit(next)
-  return { added, duplicates, missingBib }
+  return { added, duplicates, missingBib, snap }
 }
 
 export function createHeat(eventId, name) {
@@ -439,12 +459,15 @@ export function updateHeat(id, patch) {
 }
 
 export function deleteHeat(id) {
+  const heat = getHeat(state, id)
+  const snap = heat ? snapshotEvent(heat.eventId) : null
   commit({
     ...state,
     heats: state.heats.filter((h) => h.id !== id),
     runners: state.runners.map((r) => (r.heatId === id ? { ...r, heatId: null } : r)),
     crossings: state.crossings.filter((c) => c.heatId !== id),
   })
+  return snap
 }
 
 export function assignRunner(runnerId, heatId) {
@@ -455,6 +478,7 @@ export function assignRunner(runnerId, heatId) {
 // spread evenly rather than filled heat by heat: 28 runners at 12 per heat is
 // 10/9/9, not 12/12/4, which would send four people round on their own.
 export function autoSplitHeats(eventId, size = 12) {
+  const snap = snapshotEvent(eventId)
   const runners = runnersInEvent(state, eventId)
   const heatCount = Math.max(1, Math.ceil(runners.length / size))
   const heats = state.heats.filter((h) => h.eventId !== eventId)
@@ -485,7 +509,7 @@ export function autoSplitHeats(eventId, size = 12) {
     ),
     crossings: state.crossings.filter((c) => c.eventId !== eventId),
   })
-  return newHeats
+  return Object.assign(newHeats, { snap })
 }
 
 export function startHeat(heatId) {
@@ -505,6 +529,7 @@ export function reopenHeat(heatId) {
 
 export function resetHeat(heatId) {
   const heat = getHeat(state, heatId)
+  const prev = heat ? { status: heat.status, startedAt: heat.startedAt } : null
   const heats = state.heats.map((h) =>
     h.id === heatId ? { ...h, status: 'pending', startedAt: null } : h,
   )
@@ -514,28 +539,54 @@ export function resetHeat(heatId) {
     const ids = state.crossings.filter((c) => c.heatId === heatId && !c.void).map((c) => c.id)
     const next = { ...state, heats, crossings: state.crossings.map((c) => (ids.includes(c.id) ? { ...c, void: true } : c)) }
     commit(stamp(stamp(next, 'heats', [heatId]), 'crossings', ids))
-    return
+    return { online: true, heatId, prev, ids }
   }
+  const snap = heat ? snapshotEvent(heat.eventId) : null
   commit({
     ...state,
     heats,
     crossings: state.crossings.filter((c) => c.heatId !== heatId),
   })
+  return { online: false, snap }
+}
+
+// Undo a reset. A shared heat's laps were voided (deleting would not reach the
+// other phones), so they are restored the same way, stamped for the server.
+export function undoReset(info) {
+  if (!info) return
+  if (!info.online) { restoreEvent(info.snap); return }
+  commit(stamp(stamp({
+    ...state,
+    heats: state.heats.map((h) => (h.id === info.heatId ? { ...h, ...info.prev } : h)),
+    crossings: state.crossings.map((c) => (info.ids.includes(c.id) ? { ...c, void: false } : c)),
+  }, 'heats', [info.heatId]), 'crossings', info.ids))
 }
 
 // Record a crossing. Auto-computes the next lap from how many non-void
 // crossings the runner already has. Returns null if they've completed all laps.
-export function recordCrossing(heatId, runnerId, source = 'tap', at = nowMs()) {
+//
+// A tap that can't be a real lap is never thrown away: it is recorded as a
+// void crossing with `rejected` saying why, and returned so the timing screen
+// can offer to count it. Throwing it away lost data in exactly the case it
+// mattered: tap 8 when 9 crosses, and 8's real crossing ten seconds later used
+// to vanish as "already has this lap".
+//   rejected: 'duplicate'  within DUPLICATE_MS of the runner's previous lap
+//   rejected: 'too-soon'   under MIN_LAP_MS since that lap (or the start)
+// `force` skips the too-soon check (the timer confirmed it, or a manual add).
+export function recordCrossing(heatId, runnerId, source = 'tap', at = nowMs(), { force = false } = {}) {
   const heat = state.heats.find((h) => h.id === heatId)
   const event = state.events.find((e) => e.id === heat?.eventId)
   const runner = state.runners.find((r) => r.id === runnerId)
   const kept = crossingsForRunner(state, heatId, runnerId)
   const done = kept.length
   if (event && done >= requiredLaps(event, runner)) return null
-  // A second tap inside the duplicate window would be hidden anyway; not
-  // recording it keeps Undo meaning "take back the lap I can see".
   const prev = kept[kept.length - 1]
-  if (prev && at - prev.capturedAt < DUPLICATE_MS) return { ...prev, duplicate: true }
+  const since = prev ? at - prev.capturedAt : heat?.startedAt != null ? at - heat.startedAt : null
+
+  let rejected = null
+  if (prev && since < DUPLICATE_MS) rejected = 'duplicate'
+  else if (!force && since != null && since < MIN_LAP_MS) rejected = 'too-soon'
+
   const c = {
     id: uid(),
     eventId: event?.id ?? null,
@@ -546,8 +597,58 @@ export function recordCrossing(heatId, runnerId, source = 'tap', at = nowMs()) {
     capturedAt: at,
     source, // 'tap' | 'rfid' | 'manual'
     rssi: null, // reserved for RFID
-    void: false,
+    void: Boolean(rejected),
+    ...(rejected ? { rejected } : {}),
+    ...(rejected === 'duplicate' ? { dupOf: prev.id } : {}),
     enhet: DEVICE_ID,
+  }
+  commit(stamp({ ...state, crossings: [...state.crossings, c] }, 'crossings', [c.id]))
+  if (rejected === 'duplicate') return { ...c, duplicate: true, prevId: prev.id, sinceMs: since }
+  if (rejected === 'too-soon') return { ...c, tooSoon: true, sinceMs: since }
+  return c
+}
+
+// The rejected tap was the real one: count it, and (for a duplicate) void the
+// lap it collided with. One step, so a mis-tap followed by the right runner's
+// crossing is fixed from the toast instead of a trip to Review.
+export function acceptRejectedTap(id) {
+  const c = state.crossings.find((x) => x.id === id)
+  if (!c) return
+  const ids = c.dupOf ? [id, c.dupOf] : [id]
+  commit(stamp({
+    ...state,
+    crossings: state.crossings.map((x) => {
+      if (x.id === id) {
+        const { rejected, ...rest } = x
+        return { ...rest, void: false }
+      }
+      if (x.id === c.dupOf) return { ...x, void: true }
+      return x
+    }),
+  }, 'crossings', ids))
+}
+
+// Add a lap at a given time, for a crossing nobody tapped. Unlike a tap it can
+// land between existing laps (ordinals are derived from time order), so it is
+// checked against every lap, not just the last. Returns the crossing, or
+// { error } explaining why not.
+export function addLapAt(heatId, runnerId, at) {
+  const heat = getHeat(state, heatId)
+  const event = getEvent(state, heat?.eventId)
+  const runner = getRunner(state, runnerId)
+  if (!heat || heat.startedAt == null) return { error: 'The heat has not started.' }
+  if (at < heat.startedAt) return { error: 'That is before the start.' }
+  const kept = crossingsForRunner(state, heatId, runnerId)
+  if (event && kept.length >= requiredLaps(event, runner)) {
+    return { error: 'All laps are already recorded. Remove the wrong one first.' }
+  }
+  if (kept.some((c) => Math.abs(c.capturedAt - at) < DUPLICATE_MS)) {
+    return { error: 'There is already a lap within 15 seconds of that time.' }
+  }
+  const c = {
+    id: uid(), eventId: event?.id ?? null, heatId, runnerId, bib: runner?.bib ?? null,
+    lap: kept.filter((k) => k.capturedAt < at).length + 1, capturedAt: at,
+    source: 'manual', rssi: null, void: false, enhet: DEVICE_ID,
   }
   commit(stamp({ ...state, crossings: [...state.crossings, c] }, 'crossings', [c.id]))
   return c
@@ -599,6 +700,39 @@ export function setCrossingTime(id, capturedAt) {
       c.id === id ? { ...c, capturedAt, source: 'manual' } : c,
     ),
   }, 'crossings', [id]))
+}
+
+// ---- undo for destructive actions ------------------------------------------
+//
+// Every destructive action (remove a runner, delete a heat or the event,
+// reset, re-split, import) takes a snapshot of the event first, and the screen
+// offers Undo. Restoring puts the event's rows back as they were, but keeps
+// laps tapped in the meantime for runners that still exist, so undoing a setup
+// change can't eat a live heat's timing.
+export function snapshotEvent(eventId) {
+  return {
+    eventId,
+    event: getEvent(state, eventId),
+    runners: state.runners.filter((r) => r.eventId === eventId),
+    heats: state.heats.filter((h) => h.eventId === eventId),
+    crossings: state.crossings.filter((c) => c.eventId === eventId),
+  }
+}
+
+export function restoreEvent(snap) {
+  if (!snap) return
+  const id = snap.eventId
+  const others = (kind) => state[kind].filter((x) => x.eventId !== id)
+  const runnerIds = new Set(snap.runners.map((r) => r.id))
+  const had = new Set(snap.crossings.map((c) => c.id))
+  const since = state.crossings.filter((c) => c.eventId === id && !had.has(c.id) && runnerIds.has(c.runnerId))
+  commit({
+    ...state,
+    events: snap.event ? [...state.events.filter((e) => e.id !== id), snap.event] : state.events,
+    runners: [...others('runners'), ...snap.runners],
+    heats: [...others('heats'), ...snap.heats],
+    crossings: [...others('crossings'), ...snap.crossings, ...since],
+  })
 }
 
 export function exportEvent(eventId) {

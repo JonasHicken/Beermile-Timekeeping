@@ -2,10 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   useStore, getEvent, getHeat, runnersInHeat, crossingsInHeat, heatsInEvent,
-  startHeat, finishHeat, reopenHeat, resetHeat, recordCrossing, undoLastCrossing,
-  requiredLaps, statusOf,
+  startHeat, finishHeat, reopenHeat, resetHeat, undoReset, recordCrossing, undoLastCrossing,
+  acceptRejectedTap, requiredLaps, statusOf,
 } from '../lib/store.js'
 import { fmt, nowMs } from '../lib/time.js'
+import { useUndo } from '../components/Undo.jsx'
 import { useOnlineSync } from '../lib/online.js'
 import SyncBadge from '../components/SyncBadge.jsx'
 import RunnerSheet from '../components/RunnerSheet.jsx'
@@ -25,6 +26,7 @@ export default function Timing() {
   const [sheetRunner, setSheetRunner] = useState(null)
   const [hideFinished, setHideFinished] = useState(false)
   const [confirmNode, askConfirm] = useConfirm()
+  const [undoNode, offerUndo] = useUndo()
   const wakeRef = useRef(null)
   const online = Boolean(event?.online)
   useOnlineSync(eventId, online)
@@ -95,25 +97,49 @@ export default function Timing() {
     }
   })
   const finishedCount = rows.filter((x) => x.finished).length
+  const outCount = rows.filter((x) => x.out).length
+  const racingCount = rows.length - outCount
+  const allIn = rows.length > 0 && finishedCount + outCount === rows.length
   const mineCount = rows.filter((x) => mine.has(x.runner.id)).length
   const visible = rows
     .filter((x) => picking || !onlyMine || !mineCount || mine.has(x.runner.id))
     .filter((x) => picking || !hideFinished || (!x.finished && !x.out))
 
-  function showToast(msg) {
-    setToast(msg)
+  // A message after a tap. With an action (count a held-back tap) it stays up
+  // longer, so there is time to read it and press the button.
+  function showToast(msg, action = null) {
+    setToast({ msg, action })
     clearTimeout(showToast._t)
-    showToast._t = setTimeout(() => setToast(null), 1400)
+    showToast._t = setTimeout(() => setToast(null), action ? 6000 : 1400)
   }
 
   function tap(row) {
     if (picking) { toggleMine(row.runner.id); return }
-    if (!running) return
+    if (!running) {
+      if (heat.status === 'done') showToast('Heat finished · Reopen to record laps')
+      return
+    }
     if (row.out) { showToast(`${row.runner.bib} is ${row.status.toUpperCase()}`); return }
     if (row.done >= row.need) { showToast(`${row.runner.bib} already finished`); return }
     const c = recordCrossing(heatId, row.runner.id, 'tap')
     if (!c) return
-    if (c.duplicate) { showToast(`${row.runner.bib} already has this lap`); return }
+    const bib = row.runner.bib
+    // Held-back taps are kept in the log either way; these offer the one-step
+    // fix while the timer still remembers what just happened.
+    if (c.duplicate) {
+      showToast(`${bib} already had a lap ${secs(c.sinceMs)} ago. Was that one a mis-tap?`, {
+        label: 'Use this tap',
+        run: () => { acceptRejectedTap(c.id); showToast(`${bib} · lap moved to this tap`) },
+      })
+      return
+    }
+    if (c.tooSoon) {
+      showToast(`${bib}: only ${secs(c.sinceMs)} since ${row.done ? 'the last lap' : 'the start'}. Not counted.`, {
+        label: 'Count it',
+        run: () => { acceptRejectedTap(c.id); showToast(`${bib} · lap ${row.done + 1}`) },
+      })
+      return
+    }
     setFlashId(row.runner.id)
     setTimeout(() => setFlashId((id) => (id === row.runner.id ? null : id)), 220)
     if (navigator.vibrate) navigator.vibrate(15)
@@ -130,7 +156,7 @@ export default function Timing() {
   }
 
   return (
-    <div className="app">
+    <div className="app timing">
       <div className="topbar">
         <Link to={`/event/${eventId}/setup`} className="backlink">← Setup</Link>
         <div className="spacer" />
@@ -157,7 +183,10 @@ export default function Timing() {
 
       <div className="row" style={{ alignItems: 'baseline', marginTop: 4 }}>
         <h1 style={{ margin: 0, fontSize: 26 }}>{heat.name}</h1>
-        <span className="muted tiny">{finishedCount}/{runners.length} done</span>
+        {/* Out of the runners still racing: a DNF is not a runner left to wait for. */}
+        <span className="muted tiny">
+          {finishedCount}/{racingCount} finished{outCount > 0 && ` · ${outCount} out`}
+        </span>
         <div className="spacer" />
         {running && <HeatClock startedAt={heat.startedAt} />}
       </div>
@@ -212,6 +241,14 @@ export default function Timing() {
             </div>
           )}
 
+          {visible.length === 0 && !picking && hideFinished && (
+            <div className="empty" style={{ padding: '28px 10px' }}>
+              <div className="display">Everyone is in</div>
+              All {plural(rows.length, 'runner')} in this heat {outCount ? `have finished or are out (${outCount} out)` : 'have finished'}.
+              Untick “Hide finished” to see their tiles and times.
+            </div>
+          )}
+
           <div className={`grid${runners.length > 12 ? ' dense' : ''}`} style={{ marginTop: 14 }}>
             {visible.map((row) => (
               <RunnerTile
@@ -227,6 +264,12 @@ export default function Timing() {
               />
             ))}
           </div>
+
+          {running && allIn && (
+            <div className="heat-banner">
+              Everyone is in: {finishedCount} finished{outCount > 0 && `, ${outCount} out`}. Finish the heat when you are ready.
+            </div>
+          )}
 
           {running && (
             <div className="actionbar">
@@ -258,10 +301,13 @@ export default function Timing() {
                 onClick={() =>
                   askConfirm({
                     title: `Reset ${heat.name}?`,
-                    body: 'Deletes every crossing recorded in this heat and returns it to the start line. This cannot be undone.',
+                    body: 'Clears every lap recorded in this heat and returns it to the start line. You can undo it straight after.',
                     confirmLabel: 'Reset heat',
                     danger: true,
-                    onConfirm: () => resetHeat(heatId),
+                    onConfirm: () => {
+                      const info = resetHeat(heatId)
+                      offerUndo(`Reset ${heat.name}`, () => undoReset(info))
+                    },
                   })
                 }
               >
@@ -281,14 +327,28 @@ export default function Timing() {
           heatId={heatId}
           runnerId={sheetRunner}
           onClose={() => setSheetRunner(null)}
+          offerUndo={offerUndo}
         />
       )}
 
       {confirmNode}
-      {toast && <div className="toast">{toast}</div>}
+      {undoNode}
+      {toast && (
+        <div className={`toast${toast.action ? ' has-action' : ''}`} role="status">
+          <span>{toast.msg}</span>
+          {toast.action && (
+            <button className="toast-act" onClick={() => { const a = toast.action; setToast(null); a.run() }}>
+              {toast.action.label}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   )
 }
+
+const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+const secs = (ms) => `${Math.max(0, Math.round(ms / 1000))} s`
 
 function finishElapsed(crossings, runnerId, need, startedAt) {
   const cs = crossings.filter((c) => c.runnerId === runnerId).sort((a, b) => a.capturedAt - b.capturedAt)

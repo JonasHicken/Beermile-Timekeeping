@@ -1,11 +1,12 @@
 import { useState } from 'react'
+import TimeInput from '../components/TimeInput.jsx'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   useStore, getEvent, getHeat, runnersInHeat, allCrossingsInHeat,
   setCrossingVoid, reassignCrossing, setCrossingTime, dedupeCrossings,
 } from '../lib/store.js'
 import { useOnlineSync } from '../lib/online.js'
-import { fmt, parseElapsed } from '../lib/time.js'
+import { fmt } from '../lib/time.js'
 
 // Chronological crossing log for one heat. This is the accuracy backstop:
 // Undo only reaches the newest crossing, but a mistap spotted ten minutes
@@ -81,6 +82,11 @@ export default function Review() {
                   {!c.void && (counted.has(c.id)
                     ? <span className="muted tiny"> · lap {ordinals[c.id]}</span>
                     : <span className="muted tiny"> · duplicate, not counted</span>)}
+                  {c.void && c.rejected && (
+                    <span className="muted tiny">
+                      {' · '}{c.rejected === 'too-soon' ? 'too soon after the last lap' : 'second tap'}, not counted
+                    </span>
+                  )}
                 </span>
                 <span className={`src src-${c.source}`}>{c.source}</span>
               </div>
@@ -99,16 +105,17 @@ export default function Review() {
                     </select>
                   </div>
                   <div>
-                    <span className="label">Elapsed time (m:ss.d)</span>
-                    <TimeEditor
-                      value={fmt(c.capturedAt - heat.startedAt)}
-                      onCommit={(ms) => setCrossingTime(c.id, heat.startedAt + ms)}
+                    <span className="label">Time since the start</span>
+                    <TimeInput
+                      key={c.capturedAt}
+                      initialMs={c.capturedAt - heat.startedAt}
+                      onSubmit={(ms) => setCrossingTime(c.id, heat.startedAt + ms)}
                     />
                   </div>
                   <div className="row">
                     {c.void ? (
                       <button className="btn grow" onClick={() => setCrossingVoid(c.id, false)}>
-                        Restore crossing
+                        {c.rejected ? 'Count this tap' : 'Restore crossing'}
                       </button>
                     ) : (
                       <button className="btn danger grow" onClick={() => setCrossingVoid(c.id, true)}>
@@ -125,33 +132,6 @@ export default function Review() {
       </div>
 
       <div style={{ height: 24 }} />
-    </div>
-  )
-}
-
-function TimeEditor({ value, onCommit }) {
-  const [draft, setDraft] = useState(value)
-  const [bad, setBad] = useState(false)
-  return (
-    <div className="row">
-      <input
-        className="grow"
-        value={draft}
-        onChange={(e) => { setDraft(e.target.value); setBad(false) }}
-        placeholder="1:23.4"
-        inputMode="decimal"
-        style={bad ? { borderColor: 'var(--red)' } : undefined}
-      />
-      <button
-        className="btn"
-        onClick={() => {
-          const ms = parseElapsed(draft)
-          if (ms == null) { setBad(true); return }
-          onCommit(ms)
-        }}
-      >
-        Set
-      </button>
     </div>
   )
 }

@@ -1,15 +1,17 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import {
   useStore, runnerResult, getEvent, getHeat, getRunner,
   STATUSES, statusOf, penaltyOf,
-  setRunnerStatus, setPenaltyLaps, setCrossingVoid, recordCrossing,
+  setRunnerStatus, setPenaltyLaps, setCrossingVoid, recordCrossing, addLapAt,
 } from '../lib/store.js'
 import { fmt, fmtShort } from '../lib/time.js'
+import TimeInput from './TimeInput.jsx'
 
 // Bottom sheet for one runner: fix their laps, mark a status, add a penalty.
 // Opened from the tile's "⋯" button, which stops propagation so opening it can
 // never be mistaken for a crossing tap.
-export default function RunnerSheet({ eventId, heatId, runnerId, onClose }) {
+export default function RunnerSheet({ eventId, heatId, runnerId, onClose, offerUndo }) {
+  const [addingAt, setAddingAt] = useState(false)
   const event = useStore((s) => getEvent(s, eventId))
   const heat = useStore((s) => getHeat(s, heatId))
   const runner = useStore((s) => getRunner(s, runnerId))
@@ -92,7 +94,10 @@ export default function RunnerSheet({ eventId, heatId, runnerId, onClose }) {
                 </span>
                 <button
                   className="btn ghost danger"
-                  onClick={() => setCrossingVoid(l.id, true)}
+                  onClick={() => {
+                    setCrossingVoid(l.id, true)
+                    offerUndo?.(`Removed lap ${l.lap} for ${runner.bib}`, () => setCrossingVoid(l.id, false))
+                  }}
                   aria-label={`Remove lap ${l.lap}`}
                 >
                   Remove
@@ -100,14 +105,37 @@ export default function RunnerSheet({ eventId, heatId, runnerId, onClose }) {
               </div>
             ))}
           </div>
+          {/* "Now" only makes sense while the heat is running: on a finished
+              heat it stamped whatever time it was pressed, maybe half an hour
+              after the race. A missed lap is added at the time it happened. */}
           {heat.startedAt != null && result.lapsDone < result.requiredLaps && (
-            <button
-              className="btn block"
-              style={{ marginTop: 10 }}
-              onClick={() => recordCrossing(heatId, runner.id, 'manual')}
-            >
-              + Add lap at current time
-            </button>
+            <div className="stack" style={{ marginTop: 10, gap: 8 }}>
+              {heat.status === 'running' && (
+                <button
+                  className="btn block"
+                  onClick={() => recordCrossing(heatId, runner.id, 'manual', undefined, { force: true })}
+                >
+                  + Add lap now
+                </button>
+              )}
+              {addingAt ? (
+                <div>
+                  <span className="label">Missed lap at (time since the start)</span>
+                  <TimeInput
+                    submitLabel="Add"
+                    onSubmit={(ms) => {
+                      const r = addLapAt(heatId, runner.id, heat.startedAt + ms)
+                      if (r.error) return r.error
+                      setAddingAt(false)
+                    }}
+                  />
+                </div>
+              ) : (
+                <button className="btn ghost block" onClick={() => setAddingAt(true)}>
+                  + Add a missed lap at a time…
+                </button>
+              )}
+            </div>
           )}
         </div>
 
