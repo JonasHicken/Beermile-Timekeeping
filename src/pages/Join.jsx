@@ -14,7 +14,23 @@ export default function Join() {
   useEffect(() => {
     const token = decodeURIComponent(window.location.hash.slice(1))
     if (!token) { setError('This link is incomplete. Ask the organiser to send it again.'); return }
-    if (!supabaseConfigured) { setError('This copy of the app is not connected to the results server.'); return }
+    if (!supabaseConfigured) {
+      // Most likely an old copy of the app from the offline cache, saved before
+      // the server was set up: the service worker serves it once more and
+      // fetches the new version in the background. Reload once to get it.
+      let tried = false
+      try { tried = sessionStorage.getItem('bmtk:join-reload') === '1' } catch { /* reload anyway */ }
+      if (!tried) {
+        try { sessionStorage.setItem('bmtk:join-reload', '1') } catch { /* see above */ }
+        navigator.serviceWorker?.getRegistration()
+          .then((reg) => reg?.update())
+          .catch(() => {})
+          .finally(() => window.location.reload())
+        return
+      }
+      setError('This copy of the app is not connected to the results server.')
+      return
+    }
     let cancelled = false
     joinWithLink(eventId, token).then(
       (ev) => { if (!cancelled) nav(`/event/${ev.id}/setup`, { replace: true }) },
