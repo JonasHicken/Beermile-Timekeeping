@@ -572,6 +572,12 @@ export function undoReset(info) {
 // to vanish as "already has this lap".
 //   rejected: 'duplicate'  within DUPLICATE_MS of the runner's previous lap
 //   rejected: 'too-soon'   under MIN_LAP_MS since that lap (or the start)
+//   rejected: 'finished'   the runner already has all their laps. The case
+//                          that matters most: a mis-tap on someone's last lap
+//                          finished them early, and this tap is their real
+//                          finish. Kept, so it can replace the early one.
+// A 'duplicate' or 'finished' row points at the lap it collided with (dupOf),
+// which acceptRejectedTap voids in exchange.
 // `force` skips the too-soon check (the timer confirmed it, or a manual add).
 export function recordCrossing(heatId, runnerId, source = 'tap', at = nowMs(), { force = false } = {}) {
   const heat = state.heats.find((h) => h.id === heatId)
@@ -579,13 +585,15 @@ export function recordCrossing(heatId, runnerId, source = 'tap', at = nowMs(), {
   const runner = state.runners.find((r) => r.id === runnerId)
   const kept = crossingsForRunner(state, heatId, runnerId)
   const done = kept.length
-  if (event && done >= requiredLaps(event, runner)) return null
   const prev = kept[kept.length - 1]
   const since = prev ? at - prev.capturedAt : heat?.startedAt != null ? at - heat.startedAt : null
+  const finished = Boolean(event) && done >= requiredLaps(event, runner)
 
   let rejected = null
-  if (prev && since < DUPLICATE_MS) rejected = 'duplicate'
+  if (finished) rejected = prev ? 'finished' : null
+  else if (prev && since < DUPLICATE_MS) rejected = 'duplicate'
   else if (!force && since != null && since < MIN_LAP_MS) rejected = 'too-soon'
+  if (finished && !rejected) return null
 
   const c = {
     id: uid(),
@@ -593,16 +601,17 @@ export function recordCrossing(heatId, runnerId, source = 'tap', at = nowMs(), {
     heatId,
     runnerId,
     bib: runner?.bib ?? null,
-    lap: done + 1,
+    lap: finished ? done : done + 1,
     capturedAt: at,
     source, // 'tap' | 'rfid' | 'manual'
     rssi: null, // reserved for RFID
     void: Boolean(rejected),
     ...(rejected ? { rejected } : {}),
-    ...(rejected === 'duplicate' ? { dupOf: prev.id } : {}),
+    ...(rejected === 'duplicate' || rejected === 'finished' ? { dupOf: prev.id } : {}),
     enhet: DEVICE_ID,
   }
   commit(stamp({ ...state, crossings: [...state.crossings, c] }, 'crossings', [c.id]))
+  if (rejected === 'finished') return { ...c, afterFinish: true, prevId: prev.id, sinceMs: since }
   if (rejected === 'duplicate') return { ...c, duplicate: true, prevId: prev.id, sinceMs: since }
   if (rejected === 'too-soon') return { ...c, tooSoon: true, sinceMs: since }
   return c

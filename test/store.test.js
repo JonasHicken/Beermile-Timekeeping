@@ -41,12 +41,22 @@ describe('recording laps', () => {
     expect(res.laps.map((l) => l.split)).toEqual([60_000, 60_000, 60_000, 60_000])
   })
 
-  it('refuses a lap beyond the required count', () => {
+  it('does not count a lap beyond the required count, but keeps the tap', () => {
     const { heat, runners: [r] } = race(['7'], 2)
     S.recordCrossing(heat.id, r.id, 'tap', sec(60))
-    S.recordCrossing(heat.id, r.id, 'tap', sec(120))
-    expect(S.recordCrossing(heat.id, r.id, 'tap', sec(180))).toBeNull()
+    const finish = S.recordCrossing(heat.id, r.id, 'tap', sec(120))
+    const after = S.recordCrossing(heat.id, r.id, 'tap', sec(180))
+    expect(after).toMatchObject({ afterFinish: true, prevId: finish.id, void: true, rejected: 'finished' })
     expect(S.lapCount(state(), heat.id, r.id)).toBe(2)
+  })
+
+  it('a mis-tap on the last lap is fixed by using the real finish', () => {
+    const { ev, heat, runners: [r] } = race(['11'], 2)
+    S.recordCrossing(heat.id, r.id, 'tap', sec(60))
+    S.recordCrossing(heat.id, r.id, 'tap', sec(120)) // someone else crossed; 11 tapped
+    const real = S.recordCrossing(heat.id, r.id, 'tap', sec(130))
+    S.acceptRejectedTap(real.id)
+    expect(result(ev, heat, r)).toMatchObject({ finished: true, elapsed: 130_000 })
   })
 
   it('treats a second tap inside the duplicate window as the same crossing, but keeps it', () => {

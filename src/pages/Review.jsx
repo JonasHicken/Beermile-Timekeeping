@@ -12,6 +12,12 @@ import { fmt } from '../lib/time.js'
 // Undo only reaches the newest crossing, but a mistap spotted ten minutes
 // later has to be fixable too — here you can void, restore, reassign to the
 // right runner, or correct the timestamp.
+const REJECTED = {
+  'too-soon': 'too soon to be a lap',
+  duplicate: 'second tap within 15 s',
+  finished: 'after the runner finished',
+}
+
 export default function Review() {
   const { eventId, heatId } = useParams()
   const nav = useNavigate()
@@ -84,7 +90,7 @@ export default function Review() {
                     : <span className="muted tiny"> · duplicate, not counted</span>)}
                   {c.void && c.rejected && (
                     <span className="muted tiny">
-                      {' · '}{c.rejected === 'too-soon' ? 'too soon after the last lap' : 'second tap'}, not counted
+                      {' · '}{REJECTED[c.rejected] ?? 'held back'}, not counted
                     </span>
                   )}
                 </span>

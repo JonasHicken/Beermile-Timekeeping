@@ -23,6 +23,11 @@ export default function Timing() {
 
   const [flashId, setFlashId] = useState(null)
   const [toast, setToast] = useState(null)
+  // One timer for the message, kept across renders. It used to hang off the
+  // showToast function, which is new on every render, so an older tap's timer
+  // was never cleared and hid a newer message early — including the 6 s ones
+  // with a button, in exactly the quick-tap moments they are for.
+  const toastTimer = useRef(null)
   const [sheetRunner, setSheetRunner] = useState(null)
   const [hideFinished, setHideFinished] = useState(false)
   const [confirmNode, askConfirm] = useConfirm()
@@ -100,6 +105,7 @@ export default function Timing() {
   const outCount = rows.filter((x) => x.out).length
   const racingCount = rows.length - outCount
   const allIn = rows.length > 0 && finishedCount + outCount === rows.length
+  const stillRacing = rows.filter((x) => !x.finished && !x.out)
   const mineCount = rows.filter((x) => mine.has(x.runner.id)).length
   const visible = rows
     .filter((x) => picking || !onlyMine || !mineCount || mine.has(x.runner.id))
@@ -109,8 +115,8 @@ export default function Timing() {
   // longer, so there is time to read it and press the button.
   function showToast(msg, action = null) {
     setToast({ msg, action })
-    clearTimeout(showToast._t)
-    showToast._t = setTimeout(() => setToast(null), action ? 6000 : 1400)
+    clearTimeout(toastTimer.current)
+    toastTimer.current = setTimeout(() => setToast(null), action ? 6000 : 1400)
   }
 
   function tap(row) {
@@ -120,10 +126,16 @@ export default function Timing() {
       return
     }
     if (row.out) { showToast(`${row.runner.bib} is ${row.status.toUpperCase()}`); return }
-    if (row.done >= row.need) { showToast(`${row.runner.bib} already finished`); return }
     const c = recordCrossing(heatId, row.runner.id, 'tap')
     if (!c) return
     const bib = row.runner.bib
+    if (c.afterFinish) {
+      showToast(`${bib} already finished ${secs(c.sinceMs)} ago. Is this the real finish?`, {
+        label: 'Use as finish',
+        run: () => { acceptRejectedTap(c.id); showToast(`${bib} · finish moved to this tap`) },
+      })
+      return
+    }
     // Held-back taps are kept in the log either way; these offer the one-step
     // fix while the timer still remembers what just happened.
     if (c.duplicate) {
@@ -277,12 +289,23 @@ export default function Timing() {
               <button
                 className="btn grow lg"
                 onClick={() =>
-                  askConfirm({
-                    title: 'Finish this heat?',
-                    body: 'Timing stops. You can still review and correct it, or reopen the heat.',
-                    confirmLabel: 'Finish',
-                    onConfirm: () => finishHeat(heatId),
-                  })
+                  askConfirm(stillRacing.length
+                    ? {
+                        title: `${plural(stillRacing.length, 'runner')} still racing`,
+                        body:
+                          `${stillRacing.slice(0, 6).map((x) => `${x.runner.bib} (${x.done}/${x.need} laps)`).join(', ')}` +
+                          `${stillRacing.length > 6 ? ' …' : ''} ${stillRacing.length === 1 ? 'has' : 'have'} not finished. ` +
+                          'Finish anyway if they dropped out (mark them DNF), or keep timing. You can reopen the heat later.',
+                        confirmLabel: 'Finish anyway',
+                        danger: true,
+                        onConfirm: () => finishHeat(heatId),
+                      }
+                    : {
+                        title: 'Finish this heat?',
+                        body: 'Everyone is in. Timing stops; you can still review and correct it, or reopen the heat.',
+                        confirmLabel: 'Finish',
+                        onConfirm: () => finishHeat(heatId),
+                      })
                 }
               >
                 Finish heat
