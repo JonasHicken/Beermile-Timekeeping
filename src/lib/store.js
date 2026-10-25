@@ -576,6 +576,10 @@ export function undoReset(info) {
 //                          that matters most: a mis-tap on someone's last lap
 //                          finished them early, and this tap is their real
 //                          finish. Kept, so it can replace the early one.
+//   rejected: 'other-timer' the runner's last lap was tapped on another phone
+//                          under MIN_LAP_MS ago: two timers saw the same
+//                          crossing. Not offered as a swap: the earlier
+//                          timer's tap stands, and Review can still fix it.
 // A 'duplicate' or 'finished' row points at the lap it collided with (dupOf),
 // which acceptRejectedTap voids in exchange.
 // `force` skips the too-soon check (the timer confirmed it, or a manual add).
@@ -589,8 +593,11 @@ export function recordCrossing(heatId, runnerId, source = 'tap', at = nowMs(), {
   const since = prev ? at - prev.capturedAt : heat?.startedAt != null ? at - heat.startedAt : null
   const finished = Boolean(event) && done >= requiredLaps(event, runner)
 
+  const otherPhone = Boolean(prev?.enhet) && prev.enhet !== DEVICE_ID
+
   let rejected = null
-  if (finished) rejected = prev ? 'finished' : null
+  if (prev && otherPhone && since < MIN_LAP_MS) rejected = 'other-timer'
+  else if (finished) rejected = prev ? 'finished' : null
   else if (prev && since < DUPLICATE_MS) rejected = 'duplicate'
   else if (!force && since != null && since < MIN_LAP_MS) rejected = 'too-soon'
   if (finished && !rejected) return null
@@ -607,10 +614,11 @@ export function recordCrossing(heatId, runnerId, source = 'tap', at = nowMs(), {
     rssi: null, // reserved for RFID
     void: Boolean(rejected),
     ...(rejected ? { rejected } : {}),
-    ...(rejected === 'duplicate' || rejected === 'finished' ? { dupOf: prev.id } : {}),
+    ...(rejected === 'duplicate' || rejected === 'finished' || rejected === 'other-timer' ? { dupOf: prev.id } : {}),
     enhet: DEVICE_ID,
   }
   commit(stamp({ ...state, crossings: [...state.crossings, c] }, 'crossings', [c.id]))
+  if (rejected === 'other-timer') return { ...c, otherTimer: true, prevId: prev.id, sinceMs: since }
   if (rejected === 'finished') return { ...c, afterFinish: true, prevId: prev.id, sinceMs: since }
   if (rejected === 'duplicate') return { ...c, duplicate: true, prevId: prev.id, sinceMs: since }
   if (rejected === 'too-soon') return { ...c, tooSoon: true, sinceMs: since }

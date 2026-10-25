@@ -367,6 +367,20 @@ describe('shared races', () => {
     expect(S.getRunner(state(), 'r-1')).toMatchObject({ name: 'Desk name', status: 'dq' })
   })
 
+  it('a tap on a lap another timer just recorded is not offered as a swap', () => {
+    adopt()
+    S.mergeServer('ev-1', {
+      crossings: [{ id: 'c-a', heat_id: 'h-1', runner_id: 'r-1', lap: 1, captured_at: sec(80), enhet: 'phone-a' }],
+    })
+    // This phone taps the same crossing 3 s later, and again 25 s later.
+    const b = S.recordCrossing('h-1', 'r-1', 'tap', sec(83))
+    expect(b).toMatchObject({ otherTimer: true, void: true, rejected: 'other-timer', prevId: 'c-a' })
+    expect(S.recordCrossing('h-1', 'r-1', 'tap', sec(105)).otherTimer).toBe(true)
+    expect(S.lapCount(state(), 'h-1', 'r-1')).toBe(1)
+    // A real next lap a minute later counts as normal.
+    expect(S.recordCrossing('h-1', 'r-1', 'tap', sec(160)).void).toBe(false)
+  })
+
   it('undo in a shared heat only takes back this phone’s own taps', () => {
     adopt()
     S.mergeServer('ev-1', {

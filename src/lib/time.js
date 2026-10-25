@@ -47,13 +47,23 @@ export const clockInfo = () => clock
 // One measurement: the server said `serverMs` somewhere between `sentAt` and
 // `receivedAt` (phone clock). The middle of that window is the best guess, and
 // its error is at most half the round trip, so the quickest round trip is the
-// one to trust. A newer one replaces it only if it is about as quick, or the
-// saved one is more than ten minutes old (clocks drift).
+// one to trust.
+//
+// Clocks drift, so a saved reading slowly loses trust: it counts as
+// AGE_PENALTY ms of round trip worse for every minute of its age, and a newer
+// reading replaces it once it is about as good as that. It used to expire
+// outright after ten minutes, when ANY next reading was taken — on congested
+// trackside 4G that could be a 3 s round trip, i.e. ±1.5 s on every tap until
+// a quick one came back. Phone clocks drift by milliseconds per hour, so a few
+// ms per minute is generous.
+const AGE_PENALTY_MS_PER_MIN = 5
+
 export function noteServerTime(serverMs, sentAt, receivedAt) {
   const rtt = receivedAt - sentAt
   if (!Number.isFinite(serverMs) || rtt < 0 || rtt > 10000) return
-  const stale = Date.now() - clock.at > 10 * 60 * 1000
-  if (rtt <= clock.rtt * 1.25 || stale) {
+  const ageMin = Math.max(0, Date.now() - clock.at) / 60000
+  const trusted = clock.rtt + ageMin * AGE_PENALTY_MS_PER_MIN
+  if (rtt <= trusted * 1.25) {
     clock = { offset: Math.round(serverMs - (sentAt + receivedAt) / 2), rtt, at: Date.now() }
     try { localStorage.setItem(OFFSET_KEY, JSON.stringify(clock)) } catch { /* see above */ }
   }

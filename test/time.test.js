@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fmt, fmtShort } from '../src/lib/time.js'
 
 describe('fmt', () => {
@@ -24,5 +24,45 @@ describe('fmtShort', () => {
   it('rounds to whole seconds', () => {
     expect(fmtShort(65_490)).toBe('1:05')
     expect(fmtShort(65_500)).toBe('1:06')
+  })
+})
+
+describe('clock sync', () => {
+  let time
+  beforeEach(async () => {
+    localStorage.clear()
+    vi.resetModules()
+    vi.useFakeTimers()
+    vi.setSystemTime(1_700_000_000_000)
+    time = await import('../src/lib/time.js')
+  })
+  afterEach(() => vi.useRealTimers())
+
+  // The server is 5 s ahead; a reading with round trip `rtt` that the
+  // network delayed asymmetrically is off by up to rtt/2.
+  const reading = (rtt, skew = rtt / 2) => {
+    const sent = Date.now()
+    time.noteServerTime(sent + 5000 + skew, sent, sent + rtt)
+  }
+
+  it('sets the offset from the quickest round trip', () => {
+    reading(60, 30)
+    expect(time.clockInfo().offset).toBe(5000)
+    reading(2000, 1900) // slow and lopsided: ignored
+    expect(time.clockInfo().offset).toBe(5000)
+  })
+
+  it('never lets a slow reading replace a good one, however old the good one is', () => {
+    reading(60, 30)
+    vi.advanceTimersByTime(11 * 60 * 1000)
+    reading(3000, 2900) // a congested 3 s round trip after the old ten-minute expiry
+    expect(time.clockInfo().offset).toBe(5000)
+  })
+
+  it('lets an old reading be replaced by one that is nearly as good', () => {
+    reading(60, 30)
+    vi.advanceTimersByTime(10 * 60 * 1000)
+    reading(110, 40) // 110 ms: accepted once the 60 ms reading is ten minutes old
+    expect(time.clockInfo().rtt).toBe(110)
   })
 })

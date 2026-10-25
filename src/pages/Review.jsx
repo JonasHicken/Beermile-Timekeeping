@@ -16,6 +16,7 @@ const REJECTED = {
   'too-soon': 'too soon to be a lap',
   duplicate: 'second tap within 15 s',
   finished: 'after the runner finished',
+  'other-timer': 'already tapped by another timer',
 }
 
 export default function Review() {

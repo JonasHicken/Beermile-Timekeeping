@@ -113,10 +113,10 @@ export default function Timing() {
 
   // A message after a tap. With an action (count a held-back tap) it stays up
   // longer, so there is time to read it and press the button.
-  function showToast(msg, action = null) {
+  function showToast(msg, action = null, ms = null) {
     setToast({ msg, action })
     clearTimeout(toastTimer.current)
-    toastTimer.current = setTimeout(() => setToast(null), action ? 6000 : 1400)
+    toastTimer.current = setTimeout(() => setToast(null), ms ?? (action ? 6000 : 1400))
   }
 
   function tap(row) {
@@ -129,6 +129,16 @@ export default function Timing() {
     const c = recordCrossing(heatId, row.runner.id, 'tap')
     if (!c) return
     const bib = row.runner.bib
+    // Another timer already has this crossing. That is the overlap working,
+    // not a mis-tap, so no "use this tap": pressing it would swap the other
+    // timer's earlier time for this later one.
+    if (c.otherTimer) {
+      // Both phones stamp server time, so the other tap can even be a hair
+      // *later* than this one by the time it arrives; that reads "just now".
+      const when = c.sinceMs < 1000 ? 'just now' : `${secs(c.sinceMs)} ago`
+      showToast(`${bib} was already tapped by another timer ${when}. Not counted twice.`, null, 3500)
+      return
+    }
     if (c.afterFinish) {
       showToast(`${bib} already finished ${secs(c.sinceMs)} ago. Is this the real finish?`, {
         label: 'Use as finish',
