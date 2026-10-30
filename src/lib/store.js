@@ -17,8 +17,9 @@
 // ones after it. The stored `lap` records what it was at capture, for audit.
 //
 // ONLINE EVENTS (opened from a timing link, see online.js) are shared by
-// several phones. Their start list and heats come from the admin portal and
-// are read-only here; what a phone changes at the track (laps, heat start and
+// several phones. Their start list and heats are set at the desk (sign-ups on
+// beermilenorge.no, race-day changes in Race admin through the server) and
+// are never edited in this store; what a phone changes at the track (laps, heat start and
 // finish, runner status) is stamped with `endretMs` and queued in `outbox`
 // until the server has it. The newest change wins, so stamping is the whole
 // conflict story.
@@ -809,10 +810,14 @@ const fromServerCrossing = (eventId, c) => ({
 // Role, timer names and (admin only) the timer link's token, as the server
 // sent them. A server from before roles sends none of these; `role` then stays
 // unset and the phone behaves as before.
-function onlineFields(data) {
+function onlineFields(data, me) {
   const f = {}
   if (data.rolle) f.role = data.rolle
-  if (Array.isArray(data.tidtakere)) f.timers = data.tidtakere
+  if (Array.isArray(data.tidtakere)) {
+    f.timers = data.tidtakere
+    // A name the admin has since removed is no longer anyone's: pick again.
+    if (me && !data.tidtakere.includes(me)) f.me = null
+  }
   if (data.rolle) f.timerToken = data.tidtakertoken ?? null
   return f
 }
@@ -859,7 +864,7 @@ export function adoptOnlineEvent(data, token) {
   const ev = {
     id, name: data.event.name, date: data.event.date ?? '', numLaps: data.event.num_laps ?? 4,
     createdAt: getEvent(state, id)?.createdAt ?? nowMs(),
-    online: { token, me: before?.token === token ? before.me ?? null : null, ...onlineFields(data) },
+    online: { token, me: before?.token === token ? before.me ?? null : null, ...onlineFields(data, before?.token === token ? before.me : null) },
   }
   commit({ ...state, events: [...state.events.filter((e) => e.id !== id), ev] })
   mergeServer(id, data)
@@ -878,7 +883,7 @@ export function mergeServer(eventId, data) {
     if (e.id !== eventId || !data.event) return e
     const next = {
       ...e, name: data.event.name, date: data.event.date ?? '', numLaps: data.event.num_laps ?? 4,
-      online: { ...e.online, ...onlineFields(data) },
+      online: { ...e.online, ...onlineFields(data, e.online?.me) },
     }
     if (JSON.stringify(next) !== JSON.stringify(e)) { changed = true; return next }
     return e

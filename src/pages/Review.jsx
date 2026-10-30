@@ -3,7 +3,7 @@ import TimeInput from '../components/TimeInput.jsx'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import {
   useStore, getEvent, getHeat, runnersInHeat, allCrossingsInHeat,
-  setCrossingVoid, reassignCrossing, setCrossingTime, dedupeCrossings,
+  setCrossingVoid, reassignCrossing, setCrossingTime, dedupeCrossings, roleOf, canTime,
 } from '../lib/store.js'
 import { useOnlineSync } from '../lib/online.js'
 import { fmt } from '../lib/time.js'
@@ -39,6 +39,12 @@ export default function Review() {
   }
 
   const runnerById = Object.fromEntries(runners.map((r) => [r.id, r]))
+  // A timer on a shared race corrects only their own runners' laps: the
+  // server ignores a timer's change to anyone else's, so offering it would
+  // only show a correction that quietly springs back.
+  const timer = roleOf(event) === 'timer' && Boolean(event.online?.role)
+  const mine = (runnerId) => !timer || (runnerById[runnerId] && canTime(event, runnerById[runnerId]))
+  const editable = runners.filter((r) => mine(r.id))
 
   // Lap ordinals are derived here, not read from the stored `lap`, so voiding
   // a crossing renumbers everything after it for that runner.
@@ -78,10 +84,10 @@ export default function Review() {
       <div className="list" style={{ marginTop: 18 }}>
         {crossings.map((c) => {
           const runner = runnerById[c.runnerId]
-          const isEditing = editing === c.id
+          const isEditing = editing === c.id && mine(c.runnerId)
           return (
             <div className={`log-row${c.void ? ' voided' : ''}`} key={c.id}>
-              <div className="row" onClick={() => setEditing(isEditing ? null : c.id)} style={{ cursor: 'pointer' }}>
+              <div className="row" onClick={() => mine(c.runnerId) && setEditing(isEditing ? null : c.id)} style={{ cursor: mine(c.runnerId) ? 'pointer' : 'default' }}>
                 <span className="log-time">{fmt(c.capturedAt - heat.startedAt)}</span>
                 <span className="bib">{runner?.bib ?? '?'}</span>
                 <span className="grow">
@@ -106,7 +112,7 @@ export default function Review() {
                       value={c.runnerId}
                       onChange={(e) => reassignCrossing(c.id, e.target.value)}
                     >
-                      {runners.map((r) => (
+                      {editable.map((r) => (
                         <option key={r.id} value={r.id}>{r.bib} · {r.name || '—'}</option>
                       ))}
                     </select>

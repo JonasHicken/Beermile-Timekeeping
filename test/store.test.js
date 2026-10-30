@@ -414,6 +414,9 @@ describe('shared races', () => {
     // The chosen name survives opening the same link again.
     S.adoptOnlineEvent({ rolle: 'timer', event: { id: 'ev-1', name: 'Shared' }, runners: [], heats: [] }, 'timer-token')
     expect(S.getEvent(state(), 'ev-1').online.me).toBe('Anna')
+    // The admin removes Anna from the list: this phone has to pick again.
+    S.mergeServer('ev-1', { event: { id: 'ev-1', name: 'Shared' }, rolle: 'timer', tidtakere: ['Bo'] })
+    expect(S.getEvent(state(), 'ev-1').online.me).toBeNull()
   })
 
   it('the admin link may time everyone; an event from an older server has no role', () => {
