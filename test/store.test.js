@@ -389,6 +389,41 @@ describe('shared races', () => {
     expect(S.undoLastCrossing('h-1')).toBeNull()
     expect(S.lapCount(state(), 'h-1', 'r-1')).toBe(1)
   })
+
+  it('a timer times only the runners given to them, or to nobody', () => {
+    S.adoptOnlineEvent({
+      rolle: 'timer', tidtakere: ['Anna', 'Bo'],
+      event: { id: 'ev-1', name: 'Shared', num_laps: 4 },
+      runners: [
+        { id: 'r-1', bib: 1, heat_id: 'h-1', tidtaker: 'Anna' },
+        { id: 'r-2', bib: 2, heat_id: 'h-1', tidtaker: 'Bo' },
+        { id: 'r-3', bib: 3, heat_id: 'h-1', tidtaker: null },
+      ],
+      heats: [{ id: 'h-1', name: 'Heat 1', order: 0, status: 'pending' }],
+    }, 'timer-token')
+    S.setMyTimer('ev-1', 'Anna')
+    const ev = S.getEvent(state(), 'ev-1')
+    expect(S.roleOf(ev)).toBe('timer')
+    expect(['r-1', 'r-2', 'r-3'].filter((id) => S.canTime(ev, S.getRunner(state(), id)))).toEqual(['r-1', 'r-3'])
+    // The admin moves bib 2 to Anna: the desk's assignment always wins.
+    S.mergeServer('ev-1', {
+      event: { id: 'ev-1', name: 'Shared', num_laps: 4 }, rolle: 'timer', tidtakere: ['Anna', 'Bo'],
+      runners: [{ id: 'r-1', bib: 1, heat_id: 'h-1', tidtaker: 'Anna' }, { id: 'r-2', bib: 2, heat_id: 'h-1', tidtaker: 'Anna' }, { id: 'r-3', bib: 3, heat_id: 'h-1' }],
+    })
+    expect(S.canTime(S.getEvent(state(), 'ev-1'), S.getRunner(state(), 'r-2'))).toBe(true)
+    // The chosen name survives opening the same link again.
+    S.adoptOnlineEvent({ rolle: 'timer', event: { id: 'ev-1', name: 'Shared' }, runners: [], heats: [] }, 'timer-token')
+    expect(S.getEvent(state(), 'ev-1').online.me).toBe('Anna')
+  })
+
+  it('the admin link may time everyone; an event from an older server has no role', () => {
+    S.adoptOnlineEvent({ rolle: 'admin', tidtakertoken: 'tt', event: { id: 'ev-1', name: 'Shared' }, runners: [], heats: [] }, 'admin-token')
+    expect(S.roleOf(S.getEvent(state(), 'ev-1'))).toBe('admin')
+    expect(S.getEvent(state(), 'ev-1').online.timerToken).toBe('tt')
+    expect(S.canTime(S.getEvent(state(), 'ev-1'), { timer: 'Bo' })).toBe(true)
+    adopt()
+    expect(S.getEvent(state(), 'ev-1').online.role).toBeUndefined()
+  })
 })
 
 describe('dedupeCrossings', () => {

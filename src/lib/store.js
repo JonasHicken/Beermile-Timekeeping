@@ -22,6 +22,11 @@
 // finish, runner status) is stamped with `endretMs` and queued in `outbox`
 // until the server has it. The newest change wins, so stamping is the whole
 // conflict story.
+//
+// An online event is opened as ADMIN (the organiser's link: starts and
+// finishes heats, names the timers and gives them runners) or as a TIMER
+// (records laps for their own runners). `online.role` comes from the server,
+// which also enforces it; `online.me` is the timer name picked on this phone.
 // ---------------------------------------------------------------------------
 
 import { useSyncExternalStore } from 'react'
@@ -104,6 +109,14 @@ export const DEVICE_ID = (() => {
 })()
 
 export const isOnline = (s, eventId) => Boolean(getEvent(s, eventId)?.online)
+
+// 'local' for an event that lives only on this phone, else 'admin' or 'timer'.
+export const roleOf = (event) => (!event?.online ? 'local' : event.online.role === 'admin' ? 'admin' : 'timer')
+
+// Whether this phone may record laps for a runner: always on its own events
+// and for the admin; a timer only for runners given to them or to nobody.
+export const canTime = (event, runner) =>
+  roleOf(event) !== 'timer' || !runner.timer || runner.timer === event.online.me
 
 // Stamps changed rows of an online event and queues them for the server.
 // Offline events pass straight through.
@@ -781,6 +794,7 @@ const fromServerRunner = (eventId, r) => ({
   id: r.id, eventId, bib: String(r.bib), name: r.name || '', category: r.category || '',
   club: '', email: '', heatId: r.heat_id ?? null,
   status: r.status || 'ok', penaltyLaps: r.straffe ?? 0, epc: null, endretMs: r.endret_ms ?? 0,
+  timer: r.tidtaker ?? null,
 })
 const fromServerHeat = (eventId, h) => ({
   id: h.id, eventId, name: h.name, order: h.order ?? 0,
@@ -791,6 +805,25 @@ const fromServerCrossing = (eventId, c) => ({
   lap: c.lap, capturedAt: c.captured_at, source: c.source || 'tap', rssi: null,
   void: !!c.void, enhet: c.enhet ?? null, endretMs: c.endret_ms ?? 0,
 })
+
+// Role, timer names and (admin only) the timer link's token, as the server
+// sent them. A server from before roles sends none of these; `role` then stays
+// unset and the phone behaves as before.
+function onlineFields(data) {
+  const f = {}
+  if (data.rolle) f.role = data.rolle
+  if (Array.isArray(data.tidtakere)) f.timers = data.tidtakere
+  if (data.rolle) f.timerToken = data.tidtakertoken ?? null
+  return f
+}
+
+// The timer name this phone times as (null: not chosen).
+export function setMyTimer(eventId, name) {
+  commit({
+    ...state,
+    events: state.events.map((e) => (e.id === eventId && e.online ? { ...e, online: { ...e.online, me: name || null } } : e)),
+  })
+}
 
 // What a phone holds that the server does not have yet.
 export function pendingFor(s, eventId) {
@@ -819,12 +852,14 @@ export function ackSent(sent) {
 }
 
 // Opening a timing link: the event as the server has it, plus the token.
+// The timer name picked before is kept when the same link is opened again.
 export function adoptOnlineEvent(data, token) {
   const id = data.event.id
+  const before = getEvent(state, id)?.online
   const ev = {
     id, name: data.event.name, date: data.event.date ?? '', numLaps: data.event.num_laps ?? 4,
     createdAt: getEvent(state, id)?.createdAt ?? nowMs(),
-    online: { token },
+    online: { token, me: before?.token === token ? before.me ?? null : null, ...onlineFields(data) },
   }
   commit({ ...state, events: [...state.events.filter((e) => e.id !== id), ev] })
   mergeServer(id, data)
@@ -841,8 +876,11 @@ export function mergeServer(eventId, data) {
   if (!getEvent(state, eventId)) return
   const events = state.events.map((e) => {
     if (e.id !== eventId || !data.event) return e
-    const next = { ...e, name: data.event.name, date: data.event.date ?? '', numLaps: data.event.num_laps ?? 4 }
-    if (next.name !== e.name || next.date !== e.date || next.numLaps !== e.numLaps) { changed = true; return next }
+    const next = {
+      ...e, name: data.event.name, date: data.event.date ?? '', numLaps: data.event.num_laps ?? 4,
+      online: { ...e.online, ...onlineFields(data) },
+    }
+    if (JSON.stringify(next) !== JSON.stringify(e)) { changed = true; return next }
     return e
   })
 
@@ -869,7 +907,7 @@ export function mergeServer(eventId, data) {
   }
 
   const runners = data.runners
-    ? mergeList('runners', data.runners, fromServerRunner, ['bib', 'name', 'category', 'heatId'])
+    ? mergeList('runners', data.runners, fromServerRunner, ['bib', 'name', 'category', 'heatId', 'timer'])
     : state.runners
   const heats = data.heats
     ? mergeList('heats', data.heats, fromServerHeat, ['name', 'order'])

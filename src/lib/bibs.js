@@ -2,10 +2,8 @@
 // as "Women", "Men" or "Relay") gets numbers that follow each other, so a bib
 // tells a marshal the class at a glance. The organiser says which numbers are
 // available (the bibs they actually have printed), the order of the classes,
-// and optionally where each class starts.
-//
-// The same logic lives in the federation site (src/lib/startnummerBlokker.js), for
-// races whose start list is set there. Keep the two in step.
+// and optionally where each class starts. Used for events on this phone and,
+// through the admin link, for shared races (pages/RaceAdmin.jsx).
 
 const MAX = 9999
 

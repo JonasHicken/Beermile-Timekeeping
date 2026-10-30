@@ -3,7 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   useStore, getEvent, getHeat, runnersInHeat, crossingsInHeat, heatsInEvent,
   startHeat, finishHeat, reopenHeat, resetHeat, undoReset, recordCrossing, undoLastCrossing,
-  acceptRejectedTap, requiredLaps, statusOf,
+  acceptRejectedTap, requiredLaps, statusOf, roleOf, canTime,
 } from '../lib/store.js'
 import { fmt, nowMs } from '../lib/time.js'
 import { useUndo } from '../components/Undo.jsx'
@@ -11,6 +11,7 @@ import { useOnlineSync } from '../lib/online.js'
 import SyncBadge from '../components/SyncBadge.jsx'
 import RunnerSheet from '../components/RunnerSheet.jsx'
 import { useConfirm } from '../components/Confirm.jsx'
+import WhoAmI from '../components/WhoAmI.jsx'
 
 export default function Timing() {
   const { eventId, heatId } = useParams()
@@ -35,6 +36,13 @@ export default function Timing() {
   const wakeRef = useRef(null)
   const online = Boolean(event?.online)
   useOnlineSync(eventId, online)
+  // A timer on a shared race neither starts nor finishes heats (the admin
+  // does, and the server ignores it from a timer link) and sees only the
+  // runners given to them. Before the server has said which role this phone
+  // has, it behaves as it always did.
+  const role = roleOf(event)
+  const timer = role === 'timer' && Boolean(event?.online?.role)
+  const isAdmin = !timer
 
   // With several phones on one heat, each timer usually watches a few runners.
   // "Mine" is that set, kept on this phone only, and is just a filter: any
@@ -88,7 +96,7 @@ export default function Timing() {
   const counts = {}
   for (const c of crossings) counts[c.runnerId] = (counts[c.runnerId] || 0) + 1
 
-  const rows = runners.map((r) => {
+  const rows = runners.filter((r) => !timer || canTime(event, r)).map((r) => {
     const need = requiredLaps(event, r)
     const done = counts[r.id] || 0
     const st = statusOf(r)
@@ -220,16 +228,34 @@ export default function Timing() {
         </div>
       )}
 
-      {heat.status === 'pending' && runners.length > 0 && (
+      {timer && (!event.online.me && (event.online.timers ?? []).length > 0) && (
+        <div style={{ marginTop: 12 }}><WhoAmI event={event} /></div>
+      )}
+
+      {heat.status === 'pending' && runners.length > 0 && isAdmin && (
         <div className="card stack center" style={{ marginTop: 24, padding: 28 }}>
           <div className="display" style={{ fontSize: 22 }}>{runners.length} on the line</div>
           <div className="muted">
             Mass start — tap when the gun goes.
-            {online && ' Only the starter presses this; the other phones follow by themselves.'}
+            {online && " The timers' phones start by themselves."}
           </div>
+          {role === 'admin' && <TimerSummary runners={runners} names={event.online.timers ?? []} />}
           <button className="btn primary lg block" onClick={() => startHeat(heatId)}>
             ▶ Start heat
           </button>
+        </div>
+      )}
+
+      {heat.status === 'pending' && timer && (
+        <div className="card stack center" style={{ marginTop: 24, padding: 28 }}>
+          <div className="display" style={{ fontSize: 22 }}>Waiting for the start</div>
+          <div className="muted">
+            The admin starts the heat, and your phone starts with it.
+            {rows.length > 0 && ` You are timing ${rows.length === runners.length ? 'everyone' : plural(rows.length, 'runner')}:`}
+          </div>
+          {rows.length > 0 && rows.length < runners.length && (
+            <div style={{ fontWeight: 700 }}>{rows.map((x) => x.runner.bib).join(', ')}</div>
+          )}
         </div>
       )}
 
@@ -251,7 +277,7 @@ export default function Timing() {
             <div className="spacer" />
             {/* "Mine" splits a heat between several phones, which only exists
                 in a shared race; on one phone it was a row of dead space. */}
-            {online && (
+            {online && isAdmin && (
               <button className={`btn sm${picking ? ' primary' : ' ghost'}`} onClick={() => { setPicking((v) => !v); if (picking && mineCount) setOnlyMine(true) }}>
                 {picking ? 'Done' : 'Choose mine'}
               </button>
@@ -289,14 +315,14 @@ export default function Timing() {
 
           {running && allIn && (
             <div className="heat-banner">
-              Everyone is in: {finishedCount} finished{outCount > 0 && `, ${outCount} out`}. Finish the heat when you are ready.
+              Everyone is in: {finishedCount} finished{outCount > 0 && `, ${outCount} out`}. {isAdmin ? 'Finish the heat when you are ready.' : 'The admin finishes the heat.'}
             </div>
           )}
 
           {running && (
             <div className="actionbar">
               <button className="btn danger grow lg" onClick={undo}>↶ Undo</button>
-              <button
+              {isAdmin && <button
                 className="btn grow lg"
                 onClick={() =>
                   askConfirm(stillRacing.length
@@ -319,11 +345,19 @@ export default function Timing() {
                 }
               >
                 Finish heat
+              </button>}
+            </div>
+          )}
+
+          {heat.status === 'done' && !isAdmin && (
+            <div className="actionbar">
+              <button className="btn primary grow" onClick={() => nav(`/event/${eventId}/live`)}>
+                Results
               </button>
             </div>
           )}
 
-          {heat.status === 'done' && (
+          {heat.status === 'done' && isAdmin && (
             <div className="actionbar">
               {/* Reopen keeps every crossing; Reset is the destructive one. */}
               <button className="btn grow" onClick={() => reopenHeat(heatId)}>
@@ -381,6 +415,16 @@ export default function Timing() {
 }
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+
+// Who times whom in this heat, for the admin before the start.
+function TimerSummary({ runners, names }) {
+  if (!names.length) return <div className="muted tiny">No timers named yet: every timer can time every runner. Name them in Setup.</div>
+  const parts = names.map((n) => `${n} ${runners.filter((r) => r.timer === n).length}`)
+  const nobody = runners.filter((r) => !r.timer).length
+  if (nobody) parts.push(`nobody ${nobody}`)
+  return <div className="muted tiny">{parts.join(' · ')}</div>
+}
+
 const secs = (ms) => `${Math.max(0, Math.round(ms / 1000))} s`
 
 function finishElapsed(crossings, runnerId, need, startedAt) {

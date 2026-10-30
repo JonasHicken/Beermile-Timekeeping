@@ -56,7 +56,9 @@ async function rpc(name, args) {
   const receivedAt = Date.now()
   if (error) {
     if (error.hint === 'ingen_tilgang') throw new TilgangFeil(error.message)
-    throw new Error(error.message)
+    // The hint says what kind of refusal it was (e.g. 'opptatt': the bib is
+    // taken, with the holder's name in detail), for the screen to act on.
+    throw Object.assign(new Error(error.message), { hint: error.hint ?? null, detail: error.details ?? null })
   }
   if (data?.naa) noteServerTime(Number(data.naa), sentAt, receivedAt)
   return data
@@ -102,6 +104,9 @@ async function syncOnce(eventId) {
       p_crossings: pending.crossings.slice(0, 500).map(toServerCrossing),
       p_heats: pending.heats.map(toServerHeat),
       p_runners: pending.runners.map(toServerRunner),
+      // Only to a server that knows about roles (it said so with `rolle`); an
+      // older one would not recognise the parameter and refuse the call.
+      ...(ev.online.role ? { p_tidtaker: ev.online.me ?? null } : {}),
     })
     ackSent({
       crossings: pending.crossings.slice(0, 500), heats: pending.heats, runners: pending.runners,
@@ -114,6 +119,51 @@ async function syncOnce(eventId) {
   if (full) lastFull[eventId] = Date.now()
   revs[eventId] = maxRev(data.crossings, revs[eventId] ?? 0)
   mergeServer(eventId, data)
+}
+
+// The admin naming the timers and giving them runners. `names` (or null to
+// keep the list) replaces the list; `assignment` is [{ runnerId, timer }].
+// Needs a signal: it is desk work, and saying "not saved" beats a silent
+// queue. The event is fetched in full afterwards so every screen shows it.
+export class NotAdminError extends Error {}
+export function saveTimers(eventId, { names = null, assignment = [] }) {
+  return adminCall(eventId, 'tk_admin_tidtakere', {
+    p_tidtakere: names,
+    p_tildeling: assignment.map((a) => ({ runner_id: a.runnerId, tidtaker: a.timer ?? null })),
+  })
+}
+
+// One of the admin link's race-day calls (tk_admin_* in PART 18): heats, late
+// runners, bibs, timers. The server checks the admin token and does the work
+// in the same functions the site uses; then the whole event is fetched, so the
+// change shows here straight away (and on the other phones within seconds).
+// Returns what the call returned. Needs a signal.
+export async function adminCall(eventId, fn, args) {
+  const ev = getEvent(getState(), eventId)
+  if (!ev?.online) throw new Error('not-online')
+  let result
+  try {
+    result = await rpc(fn, { p_event: eventId, p_token: ev.online.token, ...args })
+  } catch (e) {
+    if (e.hint === 'ikke_admin') throw new NotAdminError(e.message)
+    throw e
+  }
+  await refresh(eventId)
+  return result
+}
+
+async function refresh(eventId) {
+  const ev = getEvent(getState(), eventId)
+  const data = await rpc('tk_hent', { p_event: eventId, p_token: ev.online.token, p_siden: 0 })
+  lastFull[eventId] = Date.now()
+  revs[eventId] = maxRev(data.crossings, revs[eventId] ?? 0)
+  mergeServer(eventId, data)
+}
+
+// The link to send to the timers, for the admin.
+export function timerLink(event) {
+  const t = event?.online?.timerToken
+  return t ? `${window.location.origin}/join/${event.id}#${t}` : null
 }
 
 // ---- the loop --------------------------------------------------------------

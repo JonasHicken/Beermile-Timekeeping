@@ -4,13 +4,14 @@ import {
   useStore, getEvent, runnersInEvent, heatsInEvent, runnersInHeat, standings, bibOwner,
   addRunner, removeRunner, updateRunner, updateEvent, restoreEvent,
   autoSplitHeats, createHeat, updateHeat, deleteHeat, assignRunner, crossingsInHeat,
-  crossingsForRunner, getHeat, getState, assignBibs,
+  crossingsForRunner, getHeat, getState, assignBibs, roleOf,
 } from '../lib/store.js'
 import { useConfirm } from '../components/Confirm.jsx'
 import { useUndo } from '../components/Undo.jsx'
 import ImportDialog from '../components/ImportDialog.jsx'
 import BibAssign from '../components/BibAssign.jsx'
 import SyncBadge from '../components/SyncBadge.jsx'
+import WhoAmI from '../components/WhoAmI.jsx'
 import { useOnlineSync } from '../lib/online.js'
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
@@ -186,20 +187,30 @@ export default function Setup() {
           <h1 style={{ margin: 0, fontSize: 26 }}>{event.name}</h1>
           <div className="muted tiny">{event.date} · {plural(event.numLaps, 'lap')}</div>
           <div className="card muted" style={{ fontSize: 15 }}>
-            Shared race: every phone with the timing link sees the same heats and laps.
-            The start list and heats are set by the organiser on beermilenorge.no and
-            update here by themselves.
+            {roleOf(event) === 'admin' && 'You are the admin of this race: you start and finish the heats and decide who times whom. '}
+            {roleOf(event) === 'timer' && event.online.role && 'You are a timer: you record laps for your runners, and the admin starts the heats. '}
+            {!event.online.role && 'Shared race: every phone with the timing link sees the same heats and laps. '}
+            {roleOf(event) === 'admin'
+              ? 'Runners, heats, bibs and timers are set in Race admin below; the timers’ phones follow by themselves.'
+              : 'The start list and heats are set by the organiser and update here by themselves.'}
           </div>
+          {roleOf(event) === 'timer' && event.online.role && <WhoAmI event={event} />}
           {heats.length > 0 && (
             <div className="list">
               {heats.map((h) => (
                 <button key={h.id} className={`btn block${h.status === 'running' ? ' primary' : ''}`}
                   onClick={() => nav(`/event/${eventId}/heat/${h.id}`)}>
                   {h.name} · {runners.filter((r) => r.heatId === h.id).length} runners
+                  {roleOf(event) === 'timer' && event.online.me && ` · ${runners.filter((r) => r.heatId === h.id && r.timer === event.online.me).length} yours`}
                   {h.status === 'running' ? ' · running' : h.status === 'done' ? ' · done' : ''}
                 </button>
               ))}
             </div>
+          )}
+          {roleOf(event) === 'admin' && (
+            <button className="btn primary block" onClick={() => nav(`/event/${eventId}/admin`)}>
+              Race admin · runners, heats, bibs, timers
+            </button>
           )}
         </div>
       ) : (
