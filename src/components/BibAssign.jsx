@@ -49,8 +49,14 @@ export default function BibAssign({ eventId, runners, onApply, onClose }) {
       </div>
 
       <label className="stack" style={{ gap: 4 }}>
-        <span className="muted tiny">Bib numbers you have, e.g. 1-60, 100-150</span>
-        <input value={numbers} onChange={(e) => setNumbers(e.target.value)} inputMode="text" />
+        <span className="muted tiny">Bib numbers you have. Paste a list, e.g. 1-60, 100-150 (commas, spaces or line breaks)</span>
+        {/* A textarea: a single-line input drops pasted line breaks and glues
+            "306-310" and "322-329" into one number. */}
+        <textarea rows={Math.min(8, Math.max(2, numbers.split('\n').length))} value={numbers}
+          onChange={(e) => setNumbers(e.target.value)} style={{ resize: 'vertical', fontFamily: 'inherit' }} />
+        {!parsed.error && parsed.numbers.length > 0 && (
+          <span className="muted tiny">{parsed.numbers.length} numbers · {parsed.numbers[0]}–{parsed.numbers[parsed.numbers.length - 1]}</span>
+        )}
       </label>
       {parsed.error && <div className="form-error">{parsed.error}</div>}
 

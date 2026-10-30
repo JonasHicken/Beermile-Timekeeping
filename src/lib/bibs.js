@@ -4,16 +4,19 @@
 // available (the bibs they actually have printed), the order of the classes,
 // and optionally where each class starts.
 //
-// The same logic lives in the federation site (src/lib/startnummer.js), for
+// The same logic lives in the federation site (src/lib/startnummerBlokker.js), for
 // races whose start list is set there. Keep the two in step.
 
 const MAX = 9999
 
-// "1-50, 60, 100-120" -> { numbers: [1..50, 60, 100..120], error }. Spaces,
-// semicolons and en dashes are accepted, and the result is sorted and unique.
+// "1-50, 60, 100-120" -> { numbers: [1..50, 60, 100..120], error }. Commas,
+// semicolons, line breaks and spaces all separate, so a list pasted from a
+// spreadsheet or a note works as it is; "1 - 5" is still a range. En dashes
+// are accepted, overlaps are fine, and the result is sorted and unique.
 export function parseNumbers(text) {
   const numbers = new Set()
-  for (const raw of String(text ?? '').split(/[,;\n]+/)) {
+  const normalised = String(text ?? '').replace(/\s*[-–]\s*/g, '-')
+  for (const raw of normalised.split(/[,;\s]+/)) {
     const part = raw.trim()
     if (!part) continue
     const m = part.match(/^(\d+)\s*(?:[-–]\s*(\d+))?$/)

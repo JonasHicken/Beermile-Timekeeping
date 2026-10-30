@@ -2,12 +2,21 @@ import { describe, expect, it } from 'vitest'
 import { parseNumbers, planBibs, classesOf } from '../src/lib/bibs.js'
 
 const entry = (key, bib, category) => ({ key, bib: String(bib), category })
+const NL = String.fromCharCode(10)
 const range = (a, b) => Array.from({ length: b - a + 1 }, (_, i) => a + i)
 
 describe('parseNumbers', () => {
   it('reads single numbers and ranges, sorted and without repeats', () => {
     expect(parseNumbers('5, 1-3; 3–4').numbers).toEqual([1, 2, 3, 4, 5])
     expect(parseNumbers('').numbers).toEqual([])
+  })
+
+  it('reads a list pasted as it is: line breaks, spaces, trailing commas, overlaps', () => {
+    const pasted = '306-310' + NL + '322-329' + NL + '304, 311, 313, 315' + NL + '322-323, 331-332, ' + NL + '337-339, 341'
+    const { numbers, error } = parseNumbers(pasted)
+    expect(error).toBeNull()
+    expect(numbers).toEqual([304, 306, 307, 308, 309, 310, 311, 313, 315, 322, 323, 324, 325, 326, 327, 328, 329, 331, 332, 337, 338, 339, 341])
+    expect(parseNumbers('1 - 3 7  9').numbers).toEqual([1, 2, 3, 7, 9])
   })
 
   it('names the part it cannot read', () => {
