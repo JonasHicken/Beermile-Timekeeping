@@ -95,39 +95,102 @@ npm test
 The suite covers the rules a timing app can't get wrong: lap counting and the
 duplicate-tap window, voiding a lap and renumbering the ones after it,
 penalty laps, standings, start-list import (Norwegian semicolon CSVs, quoted
-names, duplicate bibs), persistence across a reload, and how shared races
-queue and reconcile changes between phones. It runs on every push.
+names, duplicate bibs), persistence across a reload, how shared races
+queue and reconcile changes between phones, the admin and timer links,
+heat planning, bib blocks and results. It runs on every push.
 
-## Shared races (several phones, one race)
+## Connecting a database (Supabase)
 
-A race can be timed by more than one phone at once. Each phone opens the same
-timing link; laps, heat start/finish and runner status are stamped with a device
-id and a timestamp, queued in an outbox, and reconciled newest-wins. The start
-list and heats come from the organiser and are read-only on the phones.
+The app needs no server to time a race. Out of the box, with no
+configuration, everything lives in the browser of the phone you are using:
+start list, heats, tap timing, corrections, results with lap splits, and CSV
+export. That is enough for one phone timing one race.
 
-The server side for this lives in the **main site's** `supabase/schema.sql`,
-not in this repo.
+Connecting a database adds the features that need more than one phone.
 
-## Publishing to a website (optional)
+### What a database adds
 
-1. Run `supabase/schema.sql` in the Supabase SQL Editor (safe to re-run).
-2. Copy `.env.example` to `.env` and set `VITE_SUPABASE_URL` +
-   `VITE_SUPABASE_ANON_KEY` (the `sb_publishable_...` key).
+| Feature | What it does |
+|---|---|
+| **Shared races** | Several phones time one race. Taps, heat start/finish and runner status sync between them every couple of seconds. Every tap is saved on the phone first, so a lost signal loses nothing. |
+| **Admin and timer links** | The organiser opens the race with an **admin link**; timers get a separate **timer link**. Only the admin link can start, finish or reset a heat. |
+| **Timer codes** | A timer link alone opens nothing: each timer also types their name as the admin added them. A link that leaks is useless on its own. |
+| **Who times whom** | The admin gives each timer their runners. A timer sees and taps only their own runners and is taken straight to the heat they are timing. |
+| **Race admin** | On the admin link: add or remove late runners, build heats (limit per heat, women/men apart, relay teams apart), assign bibs in blocks per class, and split runners between timers. Every change reaches the timers' phones within seconds and can be undone. |
+| **Results** | Each runner's fastest lap, a picture of the top three per class to share on social media, and sending finishing times to a records list for approval. |
+| **Live results page** | Results update on a public page while the race is running. |
 
-The anon key can **read** published results (for a public live page) but not
-write — publishing needs a service-role context or Supabase Auth (see
-`src/lib/sync.js`). Entrant email is additionally protected by a column-level
-grant, because RLS is row-level only and would not stop the public key reading
-every entrant's address.
+The rules are enforced in the database, not only in the app: a timer link
+cannot start a heat or record laps for someone else's runners, however the
+request is made.
+
+### Setting it up
+
+1. **Create a Supabase project** at [supabase.com](https://supabase.com). The
+   free tier is enough.
+2. **Create the tables.** In the Supabase dashboard, open **SQL Editor**,
+   paste this repo's [`supabase/schema.sql`](supabase/schema.sql) and run it.
+   It is safe to run again, and its tables are prefixed `tk_`, so it can share
+   a project with other tables.
+3. **Add the race functions.** Shared races, the two links, Race admin and the
+   results export are database functions that live in the companion website's
+   schema, because that is where races and sign-ups are created: **PART 17**
+   (private races) and **PART 18** (live timing) of
+   [`supabase/schema.sql` in Beermile-Norge-](https://github.com/JonasHicken/Beermile-Norge-/blob/main/supabase/schema.sql).
+   They build on that schema's earlier parts (admins and the results table),
+   so run the whole file. Moving them into this repo, so the app can run
+   shared races on its own, is on the roadmap.
+4. **Point the app at your project.** Copy `.env.example` to `.env` and fill in:
+
+   ```bash
+   VITE_SUPABASE_URL=https://<your-project>.supabase.co
+   VITE_SUPABASE_ANON_KEY=sb_publishable_...
+   ```
+
+   Both are under **Project Settings → API keys** in Supabase. Use the
+   **publishable** key only. Never put the secret (service role) key in
+   `.env`: anything starting with `VITE_` is built into the app and readable
+   by anyone who opens it.
+5. **Restart** `npm run dev`. The app now talks to your project.
+6. **Hosting it:** build with `npm run build` and serve `dist/` from any
+   static host. On Netlify or Vercel, set the same two variables in the
+   site's environment settings; they are read at build time.
+
+### Starting a shared race
+
+A race is created on the website side, which hands out its links:
+
+1. Create a private race and link it to timing (in the companion site this is
+   `/admin/privatlop`). That creates the timing event and two links,
+   `<app address>/join/<event id>#<token>`: an admin link and a timer link.
+2. Open the **admin link** on the organiser's phone and tap **Race admin**.
+   Make the heats, assign bibs, add the timers by name, give them their
+   runners, and share the timer link from there.
+3. Each timer opens the **timer link**, types their name and lands on their
+   heat. The admin starts the heat; every phone starts with it.
+
+The token sits after the `#`, so it is never sent to a web server or written
+to its logs. A phone keeps the race once it has opened the link.
+
+### Is the publishable key safe to ship?
+
+Yes, that is what it is for: every web app that talks to Supabase ships it.
+It does not protect the data; the database does. All timing data is reached
+through functions that check the admin or timer link (and the timer's name),
+and the tables themselves are closed to direct writes. Entrant email is
+additionally protected by a column-level grant, because row-level security
+alone would not stop the public key reading every entrant's address.
 
 ## Roadmap
 
 - [x] Software core: start list, tap timing, laps, undo, live standings (offline)
 - [x] Import start lists from Excel / CSV
 - [x] Shared races: several phones timing one race
-- [ ] Publish results live to a public website (`/live`)
+- [x] Admin and timer links, timer codes, Race admin (heats, bibs, late runners, timers)
+- [x] Results: fastest laps, top-3 picture to share, export to a records list
+- [ ] Shared races without the companion website: the race functions in this repo's schema
 - [ ] RFID input module: reader bridge → same crossings log → hands-off + lap splits
-- [ ] Drinking-zone splits, multi-operator cross-check, results export
+- [ ] Drinking-zone splits, multi-operator cross-check
 
 ## Structure
 
@@ -136,21 +199,27 @@ every entrant's address.
 | `src/lib/store.js` | Local-first data model + the append-only crossings log |
 | `src/lib/time.js` | Race time formatting / elapsed helpers |
 | `src/lib/parseTable.js` | CSV/XLSX parsing, delimiter + column detection |
-| `src/lib/online.js` | Shared-race sync loop (outbox out, changes in) |
+| `src/lib/online.js` | Shared-race sync loop (outbox out, changes in), links and timer codes |
+| `src/lib/heats.js` | Heat planning and splitting runners between timers |
+| `src/lib/bibs.js` | Assigning bibs in blocks per class |
+| `src/lib/raceResults.js` | Fastest laps, top three per class, times for a records list |
+| `src/lib/shareImage.js` | The results picture for social media |
 | `src/lib/sync.js` | Supabase publish + public read/realtime (gated on write access) |
 | `src/pages/Home.jsx` | Event list / create |
 | `src/pages/Setup.jsx` | Start list + heats |
 | `src/pages/Timing.jsx` | The tap-timing tile grid (the heart) |
 | `src/pages/Review.jsx` | Chronological crossing log + corrections |
 | `src/pages/Live.jsx` | Standings + splits |
-| `src/pages/Join.jsx` | Joining a shared race from a timing link |
-| `test/` | Vitest suite for the store, file parsing and time handling |
+| `src/pages/Join.jsx` | Joining a shared race from a timing link (and the timer's name) |
+| `src/pages/RaceAdmin.jsx` | Race admin on the admin link: start list, heats, bibs, timers, results |
+| `test/` | Vitest suite: store, sync and links, heats, bibs, results, file parsing, time |
 | `supabase/schema.sql` | `tk_*` tables, RLS (public read, no anon write) |
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE). The mascot artwork (`public/logo*`) is **not**
-covered by it and remains the property of its author.
+MIT — see [LICENSE](LICENSE). The mascot artwork (`public/logo*` and
+`public/mascot-cheer.svg`) is **not** covered by it and remains the property of
+its author.
 
 ## Third-party
 

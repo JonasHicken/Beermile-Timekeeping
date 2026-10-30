@@ -8,6 +8,7 @@ import { useUndo } from '../components/Undo.jsx'
 import BibAssign from '../components/BibAssign.jsx'
 import TimerAssign from '../components/TimerAssign.jsx'
 import SyncBadge from '../components/SyncBadge.jsx'
+import RaceResults from '../components/RaceResults.jsx'
 
 // Race day for a shared race, on the admin link: late runners, heats, bibs and
 // timers. The race itself (sign-ups, links, results on the race page) is run
@@ -34,6 +35,11 @@ export default function RaceAdmin() {
   const [note, setNote] = useState(null) // { text, error }
   const [showBibs, setShowBibs] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
+  // Results first once every heat is done; the start list before that.
+  const [tab, setTab] = useState(() => {
+    const hs = heatsInEvent(getState(), eventId)
+    return hs.length > 0 && hs.every((h) => h.status === 'done') ? 'results' : 'setup'
+  })
   const [settings, setSettingsState] = useState(() => loadSettings(eventId))
   const [confirmNode, askConfirm] = useConfirm()
   const [undoNode, offerUndo] = useUndo()
@@ -263,6 +269,14 @@ export default function RaceAdmin() {
       <h1 style={{ margin: 0, fontSize: 26 }}>Race admin</h1>
       <div className="muted tiny">{event.name} · {plural(runners.length, 'runner')} · {plural(heats.length, 'heat')}</div>
 
+      <div className="chips" role="tablist" style={{ marginTop: 12 }}>
+        <button role="tab" aria-selected={tab === 'setup'} className={`chip${tab === 'setup' ? ' on' : ''}`} onClick={() => setTab('setup')}>Start list</button>
+        <button role="tab" aria-selected={tab === 'results'} className={`chip${tab === 'results' ? ' on' : ''}`} onClick={() => setTab('results')}>Results</button>
+      </div>
+
+      {tab === 'results' && <RaceResults event={event} askConfirm={askConfirm} />}
+
+      {tab === 'setup' && <>
       <div className="card stack" style={{ marginTop: 14, gap: 6 }}>
         {todo.map((x) => (
           <button key={x.go} className="todo-row" onClick={() => jump(x.go)}>
@@ -384,6 +398,7 @@ export default function RaceAdmin() {
           </div>
         ))}
       </div>
+      </>}
 
       {confirmNode}
       {undoNode}

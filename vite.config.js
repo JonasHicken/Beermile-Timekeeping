@@ -15,7 +15,7 @@ export default defineConfig({
       // index.html already links public/manifest.webmanifest; don't emit a second.
       manifest: false,
       workbox: {
-        globPatterns: ['**/*.{js,css,html,png,woff2}'],
+        globPatterns: ['**/*.{js,css,html,png,svg,woff2}'],
         // Keep the Excel parser out of the offline install: it's ~425 kB, and
         // importing a start list is a pre-race job done with a connection.
         // What has to work offline is TIMING, not setup.

@@ -1,0 +1,30 @@
+<svg width="360" height="528" viewBox="0 0 90 132" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- The bottle mascot, cheering. Not covered by the MIT licence: see README. -->
+  <defs><clipPath id="body"><path d="M38,16 H52 V36 C60,40 64,46 64,54 V92 Q64,100 45,100 Q26,100 26,92 V54 C26,46 30,40 38,36 Z"/></clipPath></defs>
+  <path d="M28,54 C20,48 16,40 15,32" stroke="#33200A" stroke-width="9" stroke-linecap="round"/>
+  <path d="M28,54 C20,48 16,40 15,32" stroke="#F5E7C0" stroke-width="5.5" stroke-linecap="round"/>
+  <circle cx="14" cy="29" r="5" fill="#F5E7C0" stroke="#33200A" stroke-width="3"/>
+  <path d="M51,98 V113" stroke="#33200A" stroke-width="9" stroke-linecap="round"/>
+  <path d="M51,98 V113" stroke="#F5E7C0" stroke-width="5.5" stroke-linecap="round"/>
+  <ellipse cx="54" cy="117" rx="7.5" ry="4.5" fill="#F5E7C0" stroke="#33200A" stroke-width="3"/>
+  <path d="M38,16 H52 V36 C60,40 64,46 64,54 V92 Q64,100 45,100 Q26,100 26,92 V54 C26,46 30,40 38,36 Z" fill="#F5E7C0"/>
+  <g clip-path="url(#body)">
+    <rect x="20" y="18" width="50" height="120" fill="#F59300"/>
+    <rect x="20" y="14.5" width="50" height="4.5" fill="#fff"/>
+  </g>
+  <path d="M38,16 H52 V36 C60,40 64,46 64,54 V92 Q64,100 45,100 Q26,100 26,92 V54 C26,46 30,40 38,36 Z" stroke="#33200A" stroke-width="3.5" stroke-linejoin="round"/>
+  <line x1="41" y1="20" x2="41" y2="32" stroke="rgba(255,255,255,.6)" stroke-width="2.5" stroke-linecap="round"/>
+  <ellipse cx="45" cy="14" rx="11" ry="5.5" fill="#fff" stroke="#33200A" stroke-width="3"/>
+  <circle cx="53" cy="20" r="3" fill="#fff" stroke="#33200A" stroke-width="2.5"/>
+  <circle cx="36" cy="9" r="2.5" fill="#fff" stroke="#33200A" stroke-width="2.5"/>
+  <circle cx="56" cy="7" r="2" fill="#fff" stroke="#33200A" stroke-width="2"/>
+  <path d="M34.5,59 Q39,53 43.5,59" stroke="#33200A" stroke-width="3" stroke-linecap="round"/>
+  <path d="M46.5,59 Q51,53 55.5,59" stroke="#33200A" stroke-width="3" stroke-linecap="round"/>
+  <path d="M34,66 Q45,82.5 56,66 Q45,72.5 34,66 Z" fill="#33200A" stroke-linejoin="round"/>
+  <path d="M62,54 C70,48 74,40 75,32" stroke="#33200A" stroke-width="9" stroke-linecap="round"/>
+  <path d="M62,54 C70,48 74,40 75,32" stroke="#F5E7C0" stroke-width="5.5" stroke-linecap="round"/>
+  <circle cx="76" cy="29" r="5" fill="#F5E7C0" stroke="#33200A" stroke-width="3"/>
+  <path d="M39,98 V113" stroke="#33200A" stroke-width="9" stroke-linecap="round"/>
+  <path d="M39,98 V113" stroke="#F5E7C0" stroke-width="5.5" stroke-linecap="round"/>
+  <ellipse cx="42" cy="117" rx="7.5" ry="4.5" fill="#F5E7C0" stroke="#33200A" stroke-width="3"/>
+</svg>
