@@ -31,14 +31,19 @@ describe('podiums', () => {
 })
 
 describe('records', () => {
-  it('rounds up to whole seconds and leaves relay teams out', () => {
+  it('rounds the time up to whole seconds and sends each lap, relay teams included', () => {
     expect(recordSeconds(364100)).toBe(365)
     expect(recordSeconds(364000)).toBe(364)
     const rows = recordRows([
       row('k', 'Kvinner', [], { elapsed: 400001 }),
-      row('s', 'Stafett', [], { elapsed: 300000 }),
-      row('m', 'Menn', [], { elapsed: 360000 }),
+      row('s', 'Stafett', [100400, 99600], { elapsed: 200000, requiredLaps: 2 }),
+      row('m', 'Menn', [90000, 90000, 90000, 90000, 5000], { elapsed: 360000, requiredLaps: 4 }),
+      row('x', 'Veteran', [], { elapsed: 360000 }),
     ])
-    expect(rows).toEqual([{ runner_id: 'k', sekunder: 401 }, { runner_id: 'm', sekunder: 360 }])
+    expect(rows).toEqual([
+      { runner_id: 'k', sekunder: 401, runder: [] },
+      { runner_id: 's', sekunder: 200, runder: [100, 100] },
+      { runner_id: 'm', sekunder: 360, runder: [90, 90, 90, 90] },
+    ])
   })
 })

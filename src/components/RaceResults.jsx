@@ -47,17 +47,17 @@ export default function RaceResults({ event, askConfirm }) {
     askConfirm({
       title: `Send ${plural(toRecords.length, 'time')} to the records list?`,
       body:
-        'Women’s and men’s finishing times go to the race website’s approval queue, rounded up to whole seconds. ' +
+        'Women’s, men’s and relay finishing times go to the race website’s approval queue, rounded up to whole seconds, with each lap’s time. ' +
         'Nothing is public until you approve each one there, so check that the runners are happy to be listed. ' +
-        'Relay teams are left out, and a runner already sent is not sent twice.',
+        'A runner already sent is not added twice; sending again fills in their lap times.',
       confirmLabel: 'Send',
       onConfirm: async () => {
         setBusy(true); setNote(null)
         try {
           const res = await adminCall(event.id, 'tk_admin_eksporter_resultater', { p_rader: toRecords })
           const sent = res?.sendt ?? 0
-          const before = toRecords.length - sent
-          setNote({ text: `${plural(sent, 'time')} sent to the approval queue${before ? `; ${before} had been sent before` : ''}.` })
+          const before = res?.oppdatert ?? toRecords.length - sent
+          setNote({ text: `${plural(sent, 'time')} sent to the approval queue${before ? `; ${before} sent before, lap times filled in` : ''}.` })
         } catch (e) {
           setNote({ text: e instanceof NotAdminError ? 'Only the admin link can do this.' : `Not sent: ${e.message}`, error: true })
         } finally { setBusy(false) }

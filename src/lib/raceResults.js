@@ -36,10 +36,17 @@ export function podiums(finishers) {
 // counts as 6:05, never as faster than it was.
 export const recordSeconds = (ms) => Math.ceil(ms / 1000)
 
-// The finishers a records list takes: individual women and men. Relay teams
-// have no class there.
+// The finishers a records list takes: women, men and relay teams, each with
+// their laps in whole seconds (nearest second; the race's own laps plus any
+// penalty laps, no stray taps after the finish).
+export const RECORD_CLASSES = ['Kvinner', 'Menn', 'Stafett']
+
 export function recordRows(finishers) {
   return finishers
-    .filter((r) => ['Kvinner', 'Menn'].includes(r.runner.category))
-    .map((r) => ({ runner_id: r.runner.id, sekunder: recordSeconds(r.elapsed) }))
+    .filter((r) => RECORD_CLASSES.includes(r.runner.category))
+    .map((r) => ({
+      runner_id: r.runner.id,
+      sekunder: recordSeconds(r.elapsed),
+      runder: (r.laps ?? []).slice(0, r.requiredLaps ?? r.laps?.length).map((l) => Math.round(l.split / 1000)),
+    }))
 }
