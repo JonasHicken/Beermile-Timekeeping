@@ -11,7 +11,7 @@ import SyncBadge from '../components/SyncBadge.jsx'
 
 // Race day for a shared race, on the admin link: late runners, heats, bibs and
 // timers. The race itself (sign-ups, links, results on the race page) is run
-// from beermilenorge.no; this is what happens at the start line. Every change
+// from the race website; this is what happens at the start line. Every change
 // is saved on the server at once (tk_admin_* in the site's schema, PART 18),
 // reaches the timers' phones within seconds, and can be undone.
 
@@ -46,7 +46,7 @@ export default function RaceAdmin() {
         <Link to={`/event/${eventId}/setup`} className="backlink">← Setup</Link>
         <div className="empty">
           <div className="display">Admin only</div>
-          Race admin opens with the race’s admin link, from beermilenorge.no.
+          Race admin opens with the race’s admin link, from the race website.
         </div>
       </div>
     )
@@ -314,7 +314,7 @@ export default function RaceAdmin() {
           <div className="muted tiny">Heats that have started are left alone. A relay team takes one place.</div>
         </div>
       ) : (
-        <div className="muted">No runners yet. Bring in the sign-ups on beermilenorge.no, or add runners in the start list below.</div>
+        <div className="muted">No runners yet. Bring in the sign-ups on the race website, or add runners in the start list below.</div>
       )}
 
       <h2 id="timers" className="admin-h">Timers</h2>
