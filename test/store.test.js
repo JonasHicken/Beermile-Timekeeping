@@ -402,3 +402,19 @@ describe('dedupeCrossings', () => {
     expect(S.dedupeCrossings(cs)).toEqual([cs[0], cs[2], cs[3]])
   })
 })
+
+describe('assigning bibs in blocks', () => {
+  it('renumbers in one go, keeps the laps, and undoes in one go', () => {
+    const { ev, heat, runners: [a, b] } = race(['1', '2'])
+    S.recordCrossing(heat.id, a.id, 'tap', sec(60))
+    const snap = S.assignBibs(ev.id, [{ key: a.id, to: 2 }, { key: b.id, to: 1 }])
+
+    expect(S.getRunner(state(), a.id).bib).toBe('2')
+    expect(S.getRunner(state(), b.id).bib).toBe('1')
+    expect(result(ev, heat, a).lapsDone).toBe(1)
+
+    S.restoreEvent(snap)
+    expect(S.getRunner(state(), a.id).bib).toBe('1')
+    expect(result(ev, heat, a).lapsDone).toBe(1)
+  })
+})

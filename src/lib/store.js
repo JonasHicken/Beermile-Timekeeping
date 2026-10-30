@@ -341,6 +341,20 @@ export function addRunner(eventId, fields) {
   return r
 }
 
+// New bibs for many runners at once (lib/bibs.js planBibs). One commit, so the
+// list never passes through a state where two runners share a number, and one
+// snapshot, so a single Undo puts every bib back. Laps belong to the runner,
+// not the number, so nothing timed is touched.
+export function assignBibs(eventId, changes) {
+  const snap = snapshotEvent(eventId)
+  const to = new Map(changes.map((c) => [c.key, String(c.to)]))
+  commit(stamp({
+    ...state,
+    runners: state.runners.map((r) => (r.eventId === eventId && to.has(r.id) ? { ...r, bib: to.get(r.id) } : r)),
+  }, 'runners', [...to.keys()]))
+  return snap
+}
+
 export function updateRunner(id, patch) {
   commit(stamp({
     ...state,

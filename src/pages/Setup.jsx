@@ -4,11 +4,12 @@ import {
   useStore, getEvent, runnersInEvent, heatsInEvent, runnersInHeat, standings, bibOwner,
   addRunner, removeRunner, updateRunner, updateEvent, restoreEvent,
   autoSplitHeats, createHeat, updateHeat, deleteHeat, assignRunner, crossingsInHeat,
-  crossingsForRunner, getHeat, getState,
+  crossingsForRunner, getHeat, getState, assignBibs,
 } from '../lib/store.js'
 import { useConfirm } from '../components/Confirm.jsx'
 import { useUndo } from '../components/Undo.jsx'
 import ImportDialog from '../components/ImportDialog.jsx'
+import BibAssign from '../components/BibAssign.jsx'
 import SyncBadge from '../components/SyncBadge.jsx'
 import { useOnlineSync } from '../lib/online.js'
 
@@ -27,6 +28,7 @@ export default function Setup() {
   const [addError, setAddError] = useState('')
   const [rowError, setRowError] = useState(null) // { id, msg }
   const [showImport, setShowImport] = useState(false)
+  const [showBibs, setShowBibs] = useState(false)
   const [importReport, setImportReport] = useState(null)
   const [heatSize, setHeatSize] = useState(12)
   // The list is sorted by bib, so editing one re-sorts on every keystroke and
@@ -261,7 +263,18 @@ export default function Setup() {
           <button className="btn ghost grow" onClick={() => setShowImport(true)}>
             Import from file
           </button>
+          <button className="btn ghost grow" onClick={() => setShowBibs(!showBibs)} aria-expanded={showBibs}>
+            Assign bibs
+          </button>
         </div>
+      )}
+      {showBibs && runners.length > 0 && (
+        <BibAssign eventId={eventId} runners={runners} onClose={() => setShowBibs(false)}
+          onApply={(changes) => {
+            const snap = assignBibs(eventId, changes)
+            setShowBibs(false)
+            offerUndo(`New bibs for ${plural(changes.length, 'runner')}`, () => restoreEvent(snap))
+          }} />
       )}
       </>}
 
