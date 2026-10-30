@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useStore, getEvent, getState, runnersInEvent, heatsInEvent, roleOf } from '../lib/store.js'
 import { adminCall, useOnlineSync, NotAdminError } from '../lib/online.js'
-import { DEFAULT_SETTINGS, GROUPS, groupOf, leastFull, planHeats } from '../lib/heats.js'
+import { DEFAULT_SETTINGS, GROUPS, groupOf, leastFull, planHeats, splitBetween } from '../lib/heats.js'
 import { useConfirm } from '../components/Confirm.jsx'
 import { useUndo } from '../components/Undo.jsx'
 import BibAssign from '../components/BibAssign.jsx'
@@ -33,6 +33,7 @@ export default function RaceAdmin() {
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState(null) // { text, error }
   const [showBibs, setShowBibs] = useState(false)
+  const [showAdd, setShowAdd] = useState(false)
   const [settings, setSettingsState] = useState(() => loadSettings(eventId))
   const [confirmNode, askConfirm] = useConfirm()
   const [undoNode, offerUndo] = useUndo()
@@ -215,15 +216,42 @@ export default function RaceAdmin() {
       () => call('tk_admin_tildel_startnummer', { p_tildeling: mapping.map((m) => ({ fra: m.til, til: m.fra })) }))
   }
 
+  // ---- timers: who times whom, per runner ----
+  const timerNames = event.online.timers ?? []
+  async function giveTimer(list, assignment, label) {
+    const before = list.map((r) => ({ runner_id: r.id, tidtaker: r.timer ?? null }))
+    if (await call('tk_admin_tidtakere', { p_tildeling: assignment }) === undefined) return
+    undoable(label, () => call('tk_admin_tidtakere', { p_tildeling: before }))
+  }
+  const setTimer = (r, timer) => giveTimer([r], [{ runner_id: r.id, tidtaker: timer || null }], `${r.bib} → ${timer || 'no timer'}`)
+  function splitTimers(title, list) {
+    if (!timerNames.length || !list.length) return
+    const assignment = splitBetween(list, timerNames).map((x) => ({ runner_id: x.runner.id, tidtaker: x.timer }))
+    giveTimer(list, assignment, `${title} split between ${plural(timerNames.length, 'timer')}`)
+  }
+
   const sections = [
-    ...(noHeat.length ? [{ key: 'none', title: `No heat · ${noHeat.length}`, list: noHeat, warn: heats.length > 0 }] : []),
+    ...(noHeat.length ? [{ key: 'none', name: 'No heat', title: `No heat · ${noHeat.length}`, list: noHeat, warn: heats.length > 0 }] : []),
     ...heats.map((h) => ({
       key: h.id,
+      name: h.name,
       title: [h.name, groupOfHeat(h) && GROUP_NAME[groupOfHeat(h)], h.status === 'running' ? 'running' : h.status === 'done' ? 'done' : null, plural(countIn(h), 'runner')].filter(Boolean).join(' · '),
       list: runners.filter((r) => r.heatId === h.id),
       started: h.status !== 'pending',
     })),
   ]
+
+  // What is left before the start, at a glance; each line jumps to its place.
+  const noTimer = runners.filter((r) => r.heatId && !r.timer).length
+  const todo = [
+    { ok: runners.length > 0 && noHeat.length === 0, go: 'heats',
+      text: !runners.length ? 'No runners yet' : noHeat.length ? `${plural(noHeat.length, 'runner')} without a heat` : 'Everyone is in a heat' },
+    { ok: timerNames.length > 0, go: 'timers',
+      text: timerNames.length ? `${plural(timerNames.length, 'timer')}: ${timerNames.join(', ')}` : 'No timers added yet' },
+    { ok: timerNames.length > 0 && noTimer === 0, go: 'list',
+      text: noTimer ? `${plural(noTimer, 'runner')} without a timer (only you can time them)` : 'Every runner has a timer' },
+  ]
+  const jump = (id) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
   return (
     <div className="app">
@@ -235,11 +263,18 @@ export default function RaceAdmin() {
       <h1 style={{ margin: 0, fontSize: 26 }}>Race admin</h1>
       <div className="muted tiny">{event.name} · {plural(runners.length, 'runner')} · {plural(heats.length, 'heat')}</div>
 
-      <AddRunner busy={busy} openHeats={openHeats} countIn={countIn} newNr={newNr} suggestFor={suggestFor} onAdd={add} />
+      <div className="card stack" style={{ marginTop: 14, gap: 6 }}>
+        {todo.map((x) => (
+          <button key={x.go} className="todo-row" onClick={() => jump(x.go)}>
+            <span className={`todo-mark${x.ok ? ' ok' : ''}`} aria-hidden>{x.ok ? '✓' : '!'}</span>
+            <span className="grow">{x.text}</span>
+          </button>
+        ))}
+      </div>
 
-      {runners.length > 0 && (
-        <div className="card stack" style={{ marginTop: 16, gap: 10 }}>
-          <strong>Make heats</strong>
+      <h2 id="heats" className="admin-h">Heats</h2>
+      {runners.length > 0 ? (
+        <div className="card stack" style={{ gap: 10 }}>
           <div className="row wrap" style={{ gap: 14 }}>
             <label className="row" style={{ gap: 8 }}>
               Max per heat
@@ -270,56 +305,85 @@ export default function RaceAdmin() {
               })}
             </div>
           )}
-          <button className="btn primary" disabled={busy || !plan.length} onClick={makeHeats}>
-            Make {plural(plan.length, 'heat')}
+          <button className={`btn${heats.length ? '' : ' primary'}`} disabled={busy || !plan.length} onClick={makeHeats}>
+            {heats.length ? `Remake as ${plural(plan.length, 'heat')}` : `Make ${plural(plan.length, 'heat')}`}
           </button>
           {noHeat.length > 0 && heats.length > 0 && (
-            <button className="btn" disabled={busy} onClick={placeWithoutHeat}>Place {noHeat.length} without a heat</button>
+            <button className="btn primary" disabled={busy} onClick={placeWithoutHeat}>Place {noHeat.length} without a heat</button>
           )}
           <div className="muted tiny">Heats that have started are left alone. A relay team takes one place.</div>
         </div>
+      ) : (
+        <div className="muted">No runners yet. Bring in the sign-ups on beermilenorge.no, or add runners in the start list below.</div>
       )}
 
-      <div className="row" style={{ marginTop: 22, alignItems: 'baseline' }}>
-        <h2 style={{ margin: 0, fontSize: 16 }}>Start list</h2>
-        <div className="spacer" />
+      <h2 id="timers" className="admin-h">Timers</h2>
+      <TimerAssign event={event} runners={runners} offerUndo={offerUndo} />
+
+      <div className="row" style={{ alignItems: 'baseline' }}>
+        <h2 id="list" className="admin-h grow">Start list</h2>
         <button className="btn ghost sm" onClick={() => setShowBibs(!showBibs)} aria-expanded={showBibs}>Assign bibs</button>
       </div>
       {showBibs && <BibAssign eventId={eventId} runners={runners} onClose={() => setShowBibs(false)} onApply={applyBibs} />}
-      <div className="muted tiny" style={{ marginTop: 6 }}>Tap a bib to change it. Changes reach the timers’ phones within seconds.</div>
+      <div className="muted tiny">Tap a bib to change it. Every change reaches the timers’ phones within seconds and can be undone.</div>
 
-      <div className="stack" style={{ marginTop: 10, gap: 16 }}>
+      <button className="btn block" style={{ marginTop: 10 }} onClick={() => setShowAdd(!showAdd)} aria-expanded={showAdd}>
+        {showAdd ? 'Close' : '+ Add a runner'}
+      </button>
+      {showAdd && <AddRunner busy={busy} openHeats={openHeats} countIn={countIn} newNr={newNr} suggestFor={suggestFor} onAdd={add} />}
+
+      <div className="stack" style={{ marginTop: 14, gap: 18 }}>
         {sections.map((s) => (
           <div key={s.key}>
-            <div style={{ fontWeight: 700, marginBottom: 4, color: s.warn ? 'var(--danger, #ff8a6b)' : s.started ? 'var(--muted)' : 'var(--amber)' }}>{s.title}</div>
+            <div className="row" style={{ alignItems: 'baseline', marginBottom: 4 }}>
+              <div className="grow" style={{ fontWeight: 700, color: s.warn ? 'var(--red)' : s.started ? 'var(--muted)' : 'var(--amber)' }}>{s.title}</div>
+              {/* Not on a heat under way: moving everyone at once would drop
+                  taps the timers have not sent yet. One runner can still move. */}
+              {timerNames.length > 0 && s.list.length > 0 && s.key !== 'none' && !s.started && (
+                <button className="btn ghost sm" disabled={busy} onClick={() => splitTimers(s.name, s.list)}>Split between timers</button>
+              )}
+            </div>
             {s.warn && <div className="muted tiny">Not timed until they are in a heat.</div>}
-            {s.list.map((r) => (
-              <div key={r.id} className="row" style={{ gap: 8, padding: '6px 0', borderBottom: '1px solid var(--line, rgba(255,255,255,.08))' }}>
-                <button className="btn ghost sm" style={{ minWidth: 56, borderStyle: 'dashed' }} disabled={busy}
-                  onClick={() => changeBib(r)} aria-label={`Change bib ${r.bib}`}>{r.bib}</button>
-                <span className="grow" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {r.name}<span className="muted tiny"> · {r.category}</span>
-                </span>
-                {locked(r) ? (
-                  <span className="muted tiny">{heatOf(r)?.name}</span>
-                ) : (
-                  <>
-                    <select value={nrOf(r) ?? ''} disabled={busy} style={{ width: 104 }}
-                      onChange={(e) => move(r, e.target.value ? Number(e.target.value) : null)} aria-label={`Heat for ${r.name}`}>
-                      <option value="">No heat</option>
-                      {openHeats.map((h) => <option key={h.id} value={h.order + 1}>{h.name} ({countIn(h)})</option>)}
-                      <option value={newNr}>New heat {newNr}</option>
-                    </select>
-                    <button className="t-more" disabled={busy} onClick={() => askRemove(r)} aria-label={`Remove ${r.name}`}>✕</button>
-                  </>
-                )}
-              </div>
-            ))}
+            {s.list.map((r) => {
+              const timerSelect = timerNames.length > 0 && (
+                <select className={`grow${r.timer ? '' : ' unset'}`} value={r.timer ?? ''} disabled={busy}
+                  onChange={(e) => setTimer(r, e.target.value)} aria-label={`Timer for ${r.name}`}
+                  style={locked(r) ? { flex: '0 0 120px' } : undefined}>
+                  <option value="">No timer</option>
+                  {timerNames.map((n) => <option key={n} value={n}>{n}</option>)}
+                </select>
+              )
+              return (
+                <div key={r.id} className="admin-row">
+                  <div className="row" style={{ gap: 8 }}>
+                    <button className="btn ghost sm" style={{ minWidth: 56, borderStyle: 'dashed' }} disabled={busy}
+                      onClick={() => changeBib(r)} aria-label={`Change bib ${r.bib}`}>{r.bib}</button>
+                    <span className="grow" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {r.name}<span className="muted tiny"> · {r.category}</span>
+                    </span>
+                    {/* In a heat that has started only the timer can change: the
+                        heading already says it has started, and the runner stays. */}
+                    {locked(r) ? timerSelect : (
+                      <button className="t-more" disabled={busy} onClick={() => askRemove(r)} aria-label={`Remove ${r.name}`}>✕</button>
+                    )}
+                  </div>
+                  {!locked(r) && (
+                    <div className="row" style={{ gap: 8, marginTop: 6 }}>
+                      <select className="grow" value={nrOf(r) ?? ''} disabled={busy}
+                        onChange={(e) => move(r, e.target.value ? Number(e.target.value) : null)} aria-label={`Heat for ${r.name}`}>
+                        <option value="">No heat</option>
+                        {openHeats.map((h) => <option key={h.id} value={h.order + 1}>{h.name} ({countIn(h)})</option>)}
+                        <option value={newNr}>New heat {newNr}</option>
+                      </select>
+                      {timerSelect}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         ))}
       </div>
-
-      <TimerAssign event={event} heats={heats} runners={runners} offerUndo={offerUndo} />
 
       {confirmNode}
       {undoNode}
@@ -358,8 +422,7 @@ function AddRunner({ busy, openHeats, countIn, newNr, suggestFor, onAdd }) {
   }
 
   return (
-    <form className="card stack" style={{ marginTop: 16, gap: 10 }} onSubmit={submit}>
-      <strong>Add a runner</strong>
+    <form className="card stack" style={{ marginTop: 10, gap: 10 }} onSubmit={submit}>
       <div className="muted tiny">For someone who did not sign up. They get the next free bib and a sign-up on the race page too.</div>
       <div className="row wrap" style={{ gap: 6 }} role="radiogroup" aria-label="Class">
         {KINDS.map(([k, label]) => (

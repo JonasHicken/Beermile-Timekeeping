@@ -1,18 +1,18 @@
 import { useState } from 'react'
-import { useParams, useNavigate, Link } from 'react-router-dom'
+import { useParams, useNavigate, Link, Navigate } from 'react-router-dom'
 import {
   useStore, getEvent, runnersInEvent, heatsInEvent, runnersInHeat, standings, bibOwner,
   addRunner, removeRunner, updateRunner, updateEvent, restoreEvent,
   autoSplitHeats, createHeat, updateHeat, deleteHeat, assignRunner, crossingsInHeat,
-  crossingsForRunner, getHeat, getState, assignBibs, roleOf,
+  crossingsForRunner, getHeat, getState, assignBibs, roleOf, timerHeat,
 } from '../lib/store.js'
 import { useConfirm } from '../components/Confirm.jsx'
 import { useUndo } from '../components/Undo.jsx'
 import ImportDialog from '../components/ImportDialog.jsx'
 import BibAssign from '../components/BibAssign.jsx'
 import SyncBadge from '../components/SyncBadge.jsx'
-import WhoAmI from '../components/WhoAmI.jsx'
-import { useOnlineSync } from '../lib/online.js'
+import TimerCode from '../components/TimerCode.jsx'
+import { useOnlineSync, useSyncStatus } from '../lib/online.js'
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
@@ -46,6 +46,11 @@ export default function Setup() {
   // list and heats are set in the admin portal, so here they are read-only.
   const online = Boolean(event?.online)
   useOnlineSync(eventId, online)
+  const sync = useSyncStatus(eventId)
+  // A timer has no business in Setup: once they are in, they go straight to
+  // the heat with their runners (and wait here until the admin gives them some).
+  const timer = roleOf(event) === 'timer' && Boolean(event?.online?.role)
+  const myHeat = useStore((s) => (timer && event.online.me ? timerHeat(s, event) : null))
 
   if (!event) {
     return (
@@ -55,6 +60,8 @@ export default function Setup() {
       </div>
     )
   }
+
+  if (timer && myHeat && !sync?.needName) return <Navigate to={`/event/${eventId}/heat/${myHeat}`} replace />
 
   const assignedCount = runners.filter((r) => r.heatId).length
   const showList = listOpen ?? !(heats.length > 0 && runners.length > 10)
@@ -186,17 +193,28 @@ export default function Setup() {
         <div className="stack">
           <h1 style={{ margin: 0, fontSize: 26 }}>{event.name}</h1>
           <div className="muted tiny">{event.date} · {plural(event.numLaps, 'lap')}</div>
-          <div className="card muted" style={{ fontSize: 15 }}>
-            {roleOf(event) === 'admin' && 'You are the admin of this race: you start and finish the heats and decide who times whom. '}
-            {roleOf(event) === 'timer' && event.online.role && 'You are a timer: you record laps for your runners, and the admin starts the heats. '}
-            {!event.online.role && 'Shared race: every phone with the timing link sees the same heats and laps. '}
-            {roleOf(event) === 'admin'
-              ? 'Runners, heats, bibs and timers are set in Race admin below; the timers’ phones follow by themselves.'
-              : 'The start list and heats are set by the organiser and update here by themselves.'}
-          </div>
-          {roleOf(event) === 'timer' && event.online.role && <WhoAmI event={event} />}
-          {heats.length > 0 && (
+          {roleOf(event) === 'admin' ? (
+            <button className="btn block admin-entry" onClick={() => nav(`/event/${eventId}/admin`)}>
+              <span>Race admin</span>
+              <span className="muted tiny">Runners, heats, bibs and timers</span>
+            </button>
+          ) : (
+            <div className="card muted" style={{ fontSize: 15 }}>
+              {roleOf(event) === 'timer' && event.online.role
+                ? 'You are a timer: the admin gives you your runners and starts the heats.'
+                : 'Shared race: every phone with the timing link sees the same heats and laps.'}
+            </div>
+          )}
+          {roleOf(event) === 'timer' && sync?.needName && <TimerCode eventId={eventId} token={event.online.token} hint={sync.needName} />}
+          {timer && event.online.me && !sync?.needName && (
+            <div className="card stack center" style={{ padding: 24 }}>
+              <div className="display" style={{ fontSize: 22 }}>You’re in, {event.online.me}</div>
+              <div className="muted">The admin has not given you any runners yet. This screen moves on to your heat by itself as soon as they do.</div>
+            </div>
+          )}
+          {heats.length > 0 && !timer && (
             <div className="list">
+              {roleOf(event) === 'admin' && <h2 style={{ margin: '10px 0 0', fontSize: 16 }}>Heats · you start and finish them</h2>}
               {heats.map((h) => (
                 <button key={h.id} className={`btn block${h.status === 'running' ? ' primary' : ''}`}
                   onClick={() => nav(`/event/${eventId}/heat/${h.id}`)}>
@@ -206,11 +224,6 @@ export default function Setup() {
                 </button>
               ))}
             </div>
-          )}
-          {roleOf(event) === 'admin' && (
-            <button className="btn primary block" onClick={() => nav(`/event/${eventId}/admin`)}>
-              Race admin · runners, heats, bibs, timers
-            </button>
           )}
         </div>
       ) : (
@@ -235,6 +248,9 @@ export default function Setup() {
       </div>
       )}
 
+      {/* A shared race's start list and heats live in Race admin (admin) or
+          are not a timer's concern: this part is for events on this phone. */}
+      {!online && <>
       {/* --- Start list --- */}
       <div className="row" style={{ marginTop: 28, marginBottom: 12, alignItems: 'baseline' }}>
         <h2 style={{ margin: 0, fontSize: 16 }}>
@@ -408,6 +424,7 @@ export default function Setup() {
           runners to it from the start list.
         </div>
       )}
+      </>}
       </>}
 
       {confirmNode}

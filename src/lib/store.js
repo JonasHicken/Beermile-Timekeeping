@@ -27,7 +27,9 @@
 // An online event is opened as ADMIN (the organiser's link: starts and
 // finishes heats, names the timers and gives them runners) or as a TIMER
 // (records laps for their own runners). `online.role` comes from the server,
-// which also enforces it; `online.me` is the timer name picked on this phone.
+// which also enforces it. A timer gets in by typing their name, which works as
+// a code: `online.me` is that name as the admin wrote it. A timer never gets
+// the list of names: a runner's `timer` is their own name or nothing.
 // ---------------------------------------------------------------------------
 
 import { useSyncExternalStore } from 'react'
@@ -115,9 +117,18 @@ export const isOnline = (s, eventId) => Boolean(getEvent(s, eventId)?.online)
 export const roleOf = (event) => (!event?.online ? 'local' : event.online.role === 'admin' ? 'admin' : 'timer')
 
 // Whether this phone may record laps for a runner: always on its own events
-// and for the admin; a timer only for runners given to them or to nobody.
+// and for the admin; a timer only for the runners the admin gave them.
 export const canTime = (event, runner) =>
-  roleOf(event) !== 'timer' || !runner.timer || runner.timer === event.online.me
+  roleOf(event) !== 'timer' || (Boolean(runner.timer) && runner.timer === event.online.me)
+
+// The heat a timer belongs on: of the heats with their runners, the one
+// running, else the next that has not started, else the last one. Null when
+// the admin has not given them any runners yet.
+export function timerHeat(s, event) {
+  const mine = new Set(s.runners.filter((r) => r.eventId === event.id && canTime(event, r) && r.heatId).map((r) => r.heatId))
+  const hs = heatsInEvent(s, event.id).filter((h) => mine.has(h.id))
+  return (hs.find((h) => h.status === 'running') ?? hs.find((h) => h.status === 'pending') ?? hs[hs.length - 1])?.id ?? null
+}
 
 // Stamps changed rows of an online event and queues them for the server.
 // Offline events pass straight through.
@@ -807,27 +818,18 @@ const fromServerCrossing = (eventId, c) => ({
   void: !!c.void, enhet: c.enhet ?? null, endretMs: c.endret_ms ?? 0,
 })
 
-// Role, timer names and (admin only) the timer link's token, as the server
-// sent them. A server from before roles sends none of these; `role` then stays
-// unset and the phone behaves as before.
-function onlineFields(data, me) {
+// Role, the timer's own name, and for the admin the list of timers and the
+// timer link's token, as the server sent them.
+function onlineFields(data) {
   const f = {}
   if (data.rolle) f.role = data.rolle
-  if (Array.isArray(data.tidtakere)) {
-    f.timers = data.tidtakere
-    // A name the admin has since removed is no longer anyone's: pick again.
-    if (me && !data.tidtakere.includes(me)) f.me = null
-  }
+  if (data.rolle === 'timer' && data.meg) f.me = data.meg
+  if (Array.isArray(data.tidtakere)) f.timers = data.tidtakere
+  // The names are the timers' codes. A phone that joined as a timer before
+  // they were codes may still hold the list: a timer link never keeps it.
+  if (data.rolle === 'timer') f.timers = []
   if (data.rolle) f.timerToken = data.tidtakertoken ?? null
   return f
-}
-
-// The timer name this phone times as (null: not chosen).
-export function setMyTimer(eventId, name) {
-  commit({
-    ...state,
-    events: state.events.map((e) => (e.id === eventId && e.online ? { ...e, online: { ...e.online, me: name || null } } : e)),
-  })
 }
 
 // What a phone holds that the server does not have yet.
@@ -857,14 +859,14 @@ export function ackSent(sent) {
 }
 
 // Opening a timing link: the event as the server has it, plus the token.
-// The timer name picked before is kept when the same link is opened again.
+// The timer's name comes back from the server once it has accepted it.
 export function adoptOnlineEvent(data, token) {
   const id = data.event.id
   const before = getEvent(state, id)?.online
   const ev = {
     id, name: data.event.name, date: data.event.date ?? '', numLaps: data.event.num_laps ?? 4,
     createdAt: getEvent(state, id)?.createdAt ?? nowMs(),
-    online: { token, me: before?.token === token ? before.me ?? null : null, ...onlineFields(data, before?.token === token ? before.me : null) },
+    online: { token, me: before?.token === token ? before.me ?? null : null, ...onlineFields(data) },
   }
   commit({ ...state, events: [...state.events.filter((e) => e.id !== id), ev] })
   mergeServer(id, data)
@@ -883,7 +885,7 @@ export function mergeServer(eventId, data) {
     if (e.id !== eventId || !data.event) return e
     const next = {
       ...e, name: data.event.name, date: data.event.date ?? '', numLaps: data.event.num_laps ?? 4,
-      online: { ...e.online, ...onlineFields(data, e.online?.me) },
+      online: { ...e.online, ...onlineFields(data) },
     }
     if (JSON.stringify(next) !== JSON.stringify(e)) { changed = true; return next }
     return e

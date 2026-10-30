@@ -390,33 +390,80 @@ describe('shared races', () => {
     expect(S.lapCount(state(), 'h-1', 'r-1')).toBe(1)
   })
 
-  it('a timer times only the runners given to them, or to nobody', () => {
+  it('a timer times only the runners given to them', () => {
+    // A timer never gets the names: their own runners carry their name, other
+    // timers' runners only say that someone else has them.
     S.adoptOnlineEvent({
-      rolle: 'timer', tidtakere: ['Anna', 'Bo'],
+      rolle: 'timer', meg: 'Anna',
       event: { id: 'ev-1', name: 'Shared', num_laps: 4 },
       runners: [
         { id: 'r-1', bib: 1, heat_id: 'h-1', tidtaker: 'Anna' },
-        { id: 'r-2', bib: 2, heat_id: 'h-1', tidtaker: 'Bo' },
+        { id: 'r-2', bib: 2, heat_id: 'h-1', tidtaker: null, annen: true },
         { id: 'r-3', bib: 3, heat_id: 'h-1', tidtaker: null },
       ],
       heats: [{ id: 'h-1', name: 'Heat 1', order: 0, status: 'pending' }],
     }, 'timer-token')
-    S.setMyTimer('ev-1', 'Anna')
     const ev = S.getEvent(state(), 'ev-1')
     expect(S.roleOf(ev)).toBe('timer')
-    expect(['r-1', 'r-2', 'r-3'].filter((id) => S.canTime(ev, S.getRunner(state(), id)))).toEqual(['r-1', 'r-3'])
-    // The admin moves bib 2 to Anna: the desk's assignment always wins.
+    expect(ev.online.me).toBe('Anna')
+    expect(ev.online.timers).toEqual([]) // the names are codes: never on a timer's phone
+    expect(['r-1', 'r-2', 'r-3'].filter((id) => S.canTime(ev, S.getRunner(state(), id)))).toEqual(['r-1'])
+    // The admin gives bib 2 to Anna: the desk's assignment always wins.
     S.mergeServer('ev-1', {
-      event: { id: 'ev-1', name: 'Shared', num_laps: 4 }, rolle: 'timer', tidtakere: ['Anna', 'Bo'],
-      runners: [{ id: 'r-1', bib: 1, heat_id: 'h-1', tidtaker: 'Anna' }, { id: 'r-2', bib: 2, heat_id: 'h-1', tidtaker: 'Anna' }, { id: 'r-3', bib: 3, heat_id: 'h-1' }],
+      event: { id: 'ev-1', name: 'Shared', num_laps: 4 }, rolle: 'timer', meg: 'Anna',
+      runners: [{ id: 'r-1', bib: 1, heat_id: 'h-1', tidtaker: 'Anna' }, { id: 'r-2', bib: 2, heat_id: 'h-1', tidtaker: 'Anna' }, { id: 'r-3', bib: 3, heat_id: 'h-1', annen: true }],
     })
-    expect(S.canTime(S.getEvent(state(), 'ev-1'), S.getRunner(state(), 'r-2'))).toBe(true)
-    // The chosen name survives opening the same link again.
+    const now = S.getEvent(state(), 'ev-1')
+    expect(S.canTime(now, S.getRunner(state(), 'r-2'))).toBe(true)
+    expect(S.canTime(now, S.getRunner(state(), 'r-3'))).toBe(false)
+    // Opening the same link again keeps the name.
     S.adoptOnlineEvent({ rolle: 'timer', event: { id: 'ev-1', name: 'Shared' }, runners: [], heats: [] }, 'timer-token')
     expect(S.getEvent(state(), 'ev-1').online.me).toBe('Anna')
-    // The admin removes Anna from the list: this phone has to pick again.
-    S.mergeServer('ev-1', { event: { id: 'ev-1', name: 'Shared' }, rolle: 'timer', tidtakere: ['Bo'] })
-    expect(S.getEvent(state(), 'ev-1').online.me).toBeNull()
+  })
+
+  it('the admin starts and finishes a shared heat, and the server echo keeps it finished', () => {
+    S.adoptOnlineEvent({
+      rolle: 'admin', event: { id: 'ev-1', name: 'Shared', num_laps: 4 },
+      runners: [{ id: 'r-1', bib: 1, heat_id: 'h-1' }],
+      heats: [{ id: 'h-1', name: 'Heat 1', order: 0, status: 'pending', endret_ms: 5 }],
+    }, 'admin-token')
+    S.startHeat('h-1')
+    const started = S.pendingFor(state(), 'ev-1')
+    expect(started.heats[0]).toMatchObject({ status: 'running' })
+    S.ackSent(started)
+    const echo = (h) => S.mergeServer('ev-1', { heats: [{ id: 'h-1', name: 'Heat 1', order: 0, status: h.status, started_at: h.startedAt, endret_ms: h.endretMs }] })
+    echo(S.getHeat(state(), 'h-1'))
+    S.finishHeat('h-1')
+    // A fetch that still has the heat running (sent before the finish arrived)
+    // does not undo the finish while it waits to be sent.
+    echo(started.heats[0])
+    expect(S.getHeat(state(), 'h-1').status).toBe('done')
+    const finished = S.pendingFor(state(), 'ev-1')
+    expect(finished.heats[0].endretMs).toBeGreaterThan(started.heats[0].endretMs)
+    S.ackSent(finished)
+    echo(finished.heats[0])
+    expect(S.getHeat(state(), 'h-1').status).toBe('done')
+  })
+
+  it('a timer is sent to the heat with their runners: the running one, else the next', () => {
+    S.adoptOnlineEvent({
+      rolle: 'timer', meg: 'Anna', event: { id: 'ev-1', name: 'Shared', num_laps: 4 },
+      runners: [
+        { id: 'r-1', bib: 1, heat_id: 'h-1', tidtaker: null, annen: true },
+        { id: 'r-2', bib: 2, heat_id: 'h-2', tidtaker: 'Anna' },
+        { id: 'r-3', bib: 3, heat_id: 'h-3', tidtaker: 'Anna' },
+        { id: 'r-4', bib: 4, heat_id: 'h-3', tidtaker: null },
+      ],
+      heats: [
+        { id: 'h-1', name: 'Heat 1', order: 0, status: 'running' },
+        { id: 'h-2', name: 'Heat 2', order: 1, status: 'done' },
+        { id: 'h-3', name: 'Heat 3', order: 2, status: 'pending' },
+      ],
+    }, 'timer-token')
+    const ev = S.getEvent(state(), 'ev-1')
+    expect(S.timerHeat(state(), ev)).toBe('h-3')
+    // Runners nobody was given are the admin's, not this timer's.
+    expect(S.canTime(ev, S.getRunner(state(), 'r-4'))).toBe(false)
   })
 
   it('the admin link may time everyone; an event from an older server has no role', () => {

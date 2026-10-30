@@ -1,18 +1,21 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
-import { joinWithLink, isAccessError } from '../lib/online.js'
+import { joinWithLink, isAccessError, isNameError } from '../lib/online.js'
 import { supabaseConfigured } from '../lib/supabase.js'
+import TimerCode from '../components/TimerCode.jsx'
 
 // Where a timing link lands: /join/<eventId>#<token>. The token sits after the
 // # so it is never sent to the web server or written to its logs. It is kept
 // with the event on this phone, so the link is only needed once per phone.
+// A timer link also asks for the timer's name (TimerCode) before it opens.
 export default function Join() {
   const { eventId } = useParams()
   const nav = useNavigate()
   const [error, setError] = useState(null)
+  const [needName, setNeedName] = useState(null) // the server's hint, when it asks for a name
+  const token = decodeURIComponent(window.location.hash.slice(1))
 
   useEffect(() => {
-    const token = decodeURIComponent(window.location.hash.slice(1))
     if (!token) { setError('This link is incomplete. Ask the organiser to send it again.'); return }
     if (!supabaseConfigured) {
       // Most likely an old copy of the app from the offline cache, saved before
@@ -36,13 +39,24 @@ export default function Join() {
       (ev) => { if (!cancelled) nav(`/event/${ev.id}/setup`, { replace: true }) },
       (e) => {
         if (cancelled) return
+        if (isNameError(e)) { setNeedName(isNameError(e)); return }
         setError(isAccessError(e)
           ? 'This timing link is no longer valid. Ask the organiser for the new one.'
           : 'Could not reach the server. Check your signal and open the link again.')
       },
     )
     return () => { cancelled = true }
-  }, [eventId, nav])
+  }, [eventId, nav, token])
+
+  if (needName) {
+    return (
+      <div className="app">
+        <h1 style={{ margin: '8px 0 14px', fontSize: 26 }}>Timing</h1>
+        <TimerCode eventId={eventId} token={token} hint={needName}
+          onIn={(ev) => nav(`/event/${ev.id}/setup`, { replace: true })} />
+      </div>
+    )
+  }
 
   return (
     <div className="app">

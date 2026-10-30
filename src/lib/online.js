@@ -47,6 +47,10 @@ export function useSyncStatus(eventId) {
 // ---- calls -----------------------------------------------------------------
 
 class TilgangFeil extends Error {}
+// A timer link that needs the timer's name: none typed yet ('trenger_navn'),
+// one not on the list ('feil_navn'), or no timers added yet ('ingen_tidtakere').
+class NavnFeil extends Error {}
+const NAVN_HINT = ['trenger_navn', 'feil_navn', 'ingen_tidtakere']
 
 async function rpc(name, args) {
   const sb = await getSupabase()
@@ -56,6 +60,7 @@ async function rpc(name, args) {
   const receivedAt = Date.now()
   if (error) {
     if (error.hint === 'ingen_tilgang') throw new TilgangFeil(error.message)
+    if (NAVN_HINT.includes(error.hint)) throw Object.assign(new NavnFeil(error.message), { hint: error.hint })
     // The hint says what kind of refusal it was (e.g. 'opptatt': the bib is
     // taken, with the holder's name in detail), for the screen to act on.
     throw Object.assign(new Error(error.message), { hint: error.hint ?? null, detail: error.details ?? null })
@@ -75,15 +80,21 @@ const toServerRunner = (r) => ({
   id: r.id, status: r.status ?? 'ok', straffe: r.penaltyLaps ?? 0, endret_ms: r.endretMs ?? 0,
 })
 
-// Opening a timing link. Throws TilgangFeil for a wrong or replaced link.
-export async function joinWithLink(eventId, token) {
-  const data = await rpc('tk_hent', { p_event: eventId, p_token: token, p_siden: 0 })
+// Opening a timing link. Throws TilgangFeil for a wrong or replaced link, and
+// NavnFeil (see isNameError) when a timer link needs the timer's name.
+export async function joinWithLink(eventId, token, name = null) {
+  const data = await rpc('tk_hent', { p_event: eventId, p_token: token, p_siden: 0, p_tidtaker: name })
   if (!data?.event) throw new Error('not-found')
   revs[eventId] = maxRev(data.crossings, 0)
   lastFull[eventId] = Date.now()
-  return adoptOnlineEvent(data, token)
+  const ev = adoptOnlineEvent(data, token)
+  // In: a screen still asking for the name can let go now, not at the next sync.
+  setStatus(eventId, { ok: true, at: Date.now(), error: null, denied: false, needName: null })
+  return ev
 }
 export const isAccessError = (e) => e instanceof TilgangFeil
+// The hint ('trenger_navn', 'feil_navn', 'ingen_tidtakere'), or null.
+export const isNameError = (e) => (e instanceof NavnFeil ? e.hint : null)
 
 function maxRev(rows, start) {
   let m = start
@@ -104,9 +115,7 @@ async function syncOnce(eventId) {
       p_crossings: pending.crossings.slice(0, 500).map(toServerCrossing),
       p_heats: pending.heats.map(toServerHeat),
       p_runners: pending.runners.map(toServerRunner),
-      // Only to a server that knows about roles (it said so with `rolle`); an
-      // older one would not recognise the parameter and refuse the call.
-      ...(ev.online.role ? { p_tidtaker: ev.online.me ?? null } : {}),
+      p_tidtaker: ev.online.me ?? null,
     })
     ackSent({
       crossings: pending.crossings.slice(0, 500), heats: pending.heats, runners: pending.runners,
@@ -115,7 +124,7 @@ async function syncOnce(eventId) {
 
   const full = !revs[eventId] || Date.now() - (lastFull[eventId] ?? 0) > FULL_EVERY_MS
   const since = full ? 0 : Math.max(0, revs[eventId] - LOOKBACK)
-  const data = await rpc('tk_hent', { p_event: eventId, p_token: token, p_siden: since })
+  const data = await rpc('tk_hent', { p_event: eventId, p_token: token, p_siden: since, p_tidtaker: ev.online.me ?? null })
   if (full) lastFull[eventId] = Date.now()
   revs[eventId] = maxRev(data.crossings, revs[eventId] ?? 0)
   mergeServer(eventId, data)
@@ -181,9 +190,9 @@ function startLoop(eventId) {
       busy = true
       try {
         await syncOnce(eventId)
-        setStatus(eventId, { ok: true, at: Date.now(), error: null, denied: false })
+        setStatus(eventId, { ok: true, at: Date.now(), error: null, denied: false, needName: null })
       } catch (e) {
-        setStatus(eventId, { ok: false, error: e.message, denied: e instanceof TilgangFeil })
+        setStatus(eventId, { ok: false, error: e.message, denied: e instanceof TilgangFeil, needName: e instanceof NavnFeil ? e.hint : null })
       } finally {
         busy = false
       }

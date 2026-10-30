@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS, groupOf, leastFull, planHeats } from '../src/lib/heats.js'
+import { DEFAULT_SETTINGS, groupOf, leastFull, planHeats, splitBetween } from '../src/lib/heats.js'
 
 const runners = (n, category, from = 0) =>
   Array.from({ length: n }, (_, i) => ({ id: `${category}-${from + i}`, category }))
@@ -40,5 +40,19 @@ describe('groupOf and leastFull', () => {
     expect(leastFull(counts, 'women', 8)).toBe(4)
     expect(leastFull(counts, 'relay', 8)).toBeNull()
     expect(leastFull({ 1: { n: 8, group: 'men' } }, 'men', 8)).toBeNull()
+  })
+})
+
+describe('splitBetween', () => {
+  it('gives each timer a block of runners in a row, as even as possible', () => {
+    const list = runners(7, 'Menn')
+    const split = splitBetween(list, ['A', 'B', 'C'])
+    expect(split.map((x) => x.timer)).toEqual(['A', 'A', 'A', 'B', 'B', 'C', 'C'])
+    expect(split.map((x) => x.runner)).toEqual(list)
+  })
+
+  it('handles more timers than runners, and no timers', () => {
+    expect(splitBetween(runners(2, 'Menn'), ['A', 'B', 'C']).map((x) => x.timer)).toEqual(['A', 'B'])
+    expect(splitBetween(runners(2, 'Menn'), [])).toEqual([])
   })
 })

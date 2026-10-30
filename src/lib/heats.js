@@ -46,3 +46,21 @@ export function leastFull(counts, group, per) {
     .sort((a, b) => a[1].n - b[1].n || b[0] - a[0])[0]
   return best ? best[0] : null
 }
+
+// Runners shared between timers in blocks of bibs that follow each other, as
+// even as possible (7 between 3 is 3 + 2 + 2): a timer watching 304-306 finds
+// their runners faster than one with every third bib. `runners` in bib order.
+// Returns [{ runner, timer }].
+export function splitBetween(runners, timers) {
+  if (!timers.length) return []
+  const per = Math.floor(runners.length / timers.length)
+  const extra = runners.length % timers.length
+  const out = []
+  let i = 0
+  timers.forEach((t, k) => {
+    const take = per + (k < extra ? 1 : 0)
+    for (const r of runners.slice(i, i + take)) out.push({ runner: r, timer: t })
+    i += take
+  })
+  return out
+}

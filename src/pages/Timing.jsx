@@ -3,15 +3,15 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   useStore, getEvent, getHeat, runnersInHeat, crossingsInHeat, heatsInEvent,
   startHeat, finishHeat, reopenHeat, resetHeat, undoReset, recordCrossing, undoLastCrossing,
-  acceptRejectedTap, requiredLaps, statusOf, roleOf, canTime,
+  acceptRejectedTap, requiredLaps, statusOf, roleOf, canTime, timerHeat,
 } from '../lib/store.js'
 import { fmt, nowMs } from '../lib/time.js'
 import { useUndo } from '../components/Undo.jsx'
-import { useOnlineSync } from '../lib/online.js'
+import { useOnlineSync, useSyncStatus } from '../lib/online.js'
 import SyncBadge from '../components/SyncBadge.jsx'
 import RunnerSheet from '../components/RunnerSheet.jsx'
 import { useConfirm } from '../components/Confirm.jsx'
-import WhoAmI from '../components/WhoAmI.jsx'
+import TimerCode from '../components/TimerCode.jsx'
 
 export default function Timing() {
   const { eventId, heatId } = useParams()
@@ -36,6 +36,7 @@ export default function Timing() {
   const wakeRef = useRef(null)
   const online = Boolean(event?.online)
   useOnlineSync(eventId, online)
+  const sync = useSyncStatus(eventId)
   // A timer on a shared race neither starts nor finishes heats (the admin
   // does, and the server ignores it from a timer link) and sees only the
   // runners given to them. Before the server has said which role this phone
@@ -43,6 +44,16 @@ export default function Timing() {
   const role = roleOf(event)
   const timer = role === 'timer' && Boolean(event?.online?.role)
   const isAdmin = !timer
+  // Where a timer belongs. They are moved on by themselves once this heat is
+  // done (or the admin moved all their runners elsewhere), so nobody has to
+  // find their way around the app at the start line.
+  const myHeat = useStore((s) => (timer && event.online.me ? timerHeat(s, event) : null))
+  const myHeatIds = useStore((s) => (timer ? new Set(s.runners.filter((r) => r.eventId === eventId && event && canTime(event, r)).map((r) => r.heatId)) : null))
+  const mineHere = useStore((s) => (timer ? s.runners.some((r) => r.heatId === heatId && canTime(event, r)) : true))
+  useEffect(() => {
+    if (!timer || !myHeat || myHeat === heatId) return
+    if (heat?.status === 'done' || !mineHere) nav(`/event/${eventId}/heat/${myHeat}`, { replace: true })
+  }, [timer, myHeat, heatId, heat?.status, mineHere, eventId, nav])
 
   // With several phones on one heat, each timer usually watches a few runners.
   // "Mine" is that set, kept on this phone only, and is just a filter: any
@@ -188,7 +199,9 @@ export default function Timing() {
   return (
     <div className="app timing">
       <div className="topbar">
-        <Link to={`/event/${eventId}/setup`} className="backlink">← Setup</Link>
+        {timer
+          ? <span className="muted tiny">{event.online.me ? `Timing as ${event.online.me}` : 'Timer'}</span>
+          : <Link to={`/event/${eventId}/setup`} className="backlink">← Setup</Link>}
         <div className="spacer" />
         {online && <SyncBadge eventId={eventId} />}
         <button className="btn ghost" onClick={() => nav(`/event/${eventId}/heat/${heatId}/review`)}>Review</button>
@@ -196,9 +209,9 @@ export default function Timing() {
       </div>
 
       {/* heat switcher — jump between heats without going back to Setup */}
-      {heats.length > 1 && (
+      {heats.filter((h) => !timer || myHeatIds?.has(h.id)).length > 1 && (
         <div className="chips">
-          {heats.map((h) => (
+          {heats.filter((h) => !timer || myHeatIds?.has(h.id)).map((h) => (
             <button
               key={h.id}
               className={`chip${h.id === heatId ? ' on' : ''}`}
@@ -228,8 +241,8 @@ export default function Timing() {
         </div>
       )}
 
-      {timer && (!event.online.me && (event.online.timers ?? []).length > 0) && (
-        <div style={{ marginTop: 12 }}><WhoAmI event={event} /></div>
+      {timer && sync?.needName && (
+        <div style={{ marginTop: 12 }}><TimerCode eventId={eventId} token={event.online.token} hint={sync.needName} /></div>
       )}
 
       {heat.status === 'pending' && runners.length > 0 && isAdmin && (
@@ -251,9 +264,9 @@ export default function Timing() {
           <div className="display" style={{ fontSize: 22 }}>Waiting for the start</div>
           <div className="muted">
             The admin starts the heat, and your phone starts with it.
-            {rows.length > 0 && ` You are timing ${rows.length === runners.length ? 'everyone' : plural(rows.length, 'runner')}:`}
+            {rows.length > 0 && ` You are timing ${plural(rows.length, 'runner')}:`}
           </div>
-          {rows.length > 0 && rows.length < runners.length && (
+          {rows.length > 0 && (
             <div style={{ fontWeight: 700 }}>{rows.map((x) => x.runner.bib).join(', ')}</div>
           )}
         </div>
@@ -418,10 +431,10 @@ const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
 // Who times whom in this heat, for the admin before the start.
 function TimerSummary({ runners, names }) {
-  if (!names.length) return <div className="muted tiny">No timers named yet: every timer can time every runner. Name them in Setup.</div>
+  if (!names.length) return <div className="muted tiny">No timers added yet, so only you can time this heat. Add them in Race admin.</div>
   const parts = names.map((n) => `${n} ${runners.filter((r) => r.timer === n).length}`)
   const nobody = runners.filter((r) => !r.timer).length
-  if (nobody) parts.push(`nobody ${nobody}`)
+  if (nobody) parts.push(`only you ${nobody}`)
   return <div className="muted tiny">{parts.join(' · ')}</div>
 }
 

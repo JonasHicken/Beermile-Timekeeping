@@ -16,6 +16,7 @@ export default function SyncBadge({ eventId }) {
   let kind = 'wait'
   let text = 'Connecting…'
   if (st?.denied) { kind = 'bad'; text = 'Link no longer valid' }
+  else if (st?.needName) { kind = 'bad'; text = waiting ? `Name needed · ${waiting} waiting` : 'Name needed' }
   else if (st?.ok && Date.now() - st.at < 10000) {
     kind = waiting ? 'wait' : 'ok'
     text = waiting ? `Sending ${waiting}…` : 'Live'
