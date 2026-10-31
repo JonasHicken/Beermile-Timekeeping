@@ -64,3 +64,22 @@ export function splitBetween(runners, timers) {
   })
   return out
 }
+
+// Timers for several heats at once: each heat's runners shared between the
+// chosen timers in blocks, as even as possible and never more than `max` per
+// timer. A heat bigger than the timers can take gives its last runners no
+// timer, and says how many. heats: [{ id, runners }] with runners in bib order.
+// Returns [{ id, split: [{ runner, timer }], left }], `timer` null for those left.
+export function planTimers(heats, timers, max) {
+  const cap = Math.max(1, Math.floor(max) || 1)
+  return heats.map((h) => {
+    const room = timers.length * cap
+    const taken = h.runners.slice(0, room)
+    const rest = h.runners.slice(room)
+    return {
+      id: h.id,
+      split: [...splitBetween(taken, timers), ...rest.map((r) => ({ runner: r, timer: null }))],
+      left: rest.length,
+    }
+  })
+}

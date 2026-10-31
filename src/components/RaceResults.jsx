@@ -4,13 +4,14 @@ import { adminCall, NotAdminError } from '../lib/online.js'
 import { fmt } from '../lib/time.js'
 import { classesIn, fastestLaps, podiums, recordRows } from '../lib/raceResults.js'
 import { drawResults, sharePicture } from '../lib/shareImage.js'
+import ResultCorrections from './ResultCorrections.jsx'
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
 // Race admin's Results tab: each runner's fastest lap, a picture of the top
 // three per class to post, and sending the times to the race website's
 // records list (where they wait for approval before anyone sees them).
-export default function RaceResults({ event, askConfirm }) {
+export default function RaceResults({ event, askConfirm, offerUndo }) {
   const st = useStore((s) => standings(s, event.id))
   const heats = useStore((s) => heatsInEvent(s, event.id))
   const [cls, setCls] = useState(null) // null = all classes
@@ -73,7 +74,17 @@ export default function RaceResults({ event, askConfirm }) {
         </div>
       )}
 
-      <h2 className="admin-h" style={{ marginTop: 6 }}>Fastest laps</h2>
+      <h2 className="admin-h" style={{ marginTop: 6 }}>Results</h2>
+      {st.finishers.length + st.didNotFinish.length === 0 ? (
+        <div className="muted">Nobody has finished yet.</div>
+      ) : (
+        <>
+          <ResultCorrections event={event} finishers={st.finishers} out={st.didNotFinish} askConfirm={askConfirm} offerUndo={offerUndo} />
+          <div className="muted tiny">Tap Edit to correct a name, a bib or a finishing time. Each change asks first and can be undone.</div>
+        </>
+      )}
+
+      <h2 className="admin-h">Fastest laps</h2>
       {laps.length === 0 ? (
         <div className="muted">No laps recorded yet.</div>
       ) : (

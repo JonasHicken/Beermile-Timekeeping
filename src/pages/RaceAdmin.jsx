@@ -9,6 +9,7 @@ import BibAssign from '../components/BibAssign.jsx'
 import TimerAssign from '../components/TimerAssign.jsx'
 import SyncBadge from '../components/SyncBadge.jsx'
 import RaceResults from '../components/RaceResults.jsx'
+import TimerAutoAssign from '../components/TimerAutoAssign.jsx'
 
 // Race day for a shared race, on the admin link: late runners, heats, bibs and
 // timers. The race itself (sign-ups, links, results on the race page) is run
@@ -151,9 +152,13 @@ export default function RaceAdmin() {
       p_klasse: f.kind === 'stafett' ? 'stafett' : 'individuell', p_navn: f.name,
       p_kjonn: f.kind === 'stafett' ? null : f.kind, p_lagnavn: f.team || null, p_partner_navn: f.partner || null,
       p_heat: f.heat || null,
+      p_startnummer: f.bib ? Number(f.bib) : null,
     })
     if (res === undefined) return false
     const bib = String(res.ny_bib ?? '')
+    // The server falls back to the next free bib when the one asked for turned
+    // out to be taken (by a sign-up not in the start list yet, say): say so.
+    if (f.bib && bib !== String(Number(f.bib))) say(`Bib ${f.bib} was taken, so they got ${bib}. Tap the bib in the start list to change it.`, true)
     undoable(`Added ${bib} ${f.kind === 'stafett' ? f.team : f.name} · ${where(f.heat)}`, async () => {
       // Looked up when undone: the list has been fetched again since.
       const r = runnersInEvent(getState(), eventId).find((x) => x.bib === bib)
@@ -274,7 +279,7 @@ export default function RaceAdmin() {
         <button role="tab" aria-selected={tab === 'results'} className={`chip${tab === 'results' ? ' on' : ''}`} onClick={() => setTab('results')}>Results</button>
       </div>
 
-      {tab === 'results' && <RaceResults event={event} askConfirm={askConfirm} />}
+      {tab === 'results' && <RaceResults event={event} askConfirm={askConfirm} offerUndo={offerUndo} />}
 
       {tab === 'setup' && <>
       <div className="card stack" style={{ marginTop: 14, gap: 6 }}>
@@ -333,6 +338,10 @@ export default function RaceAdmin() {
 
       <h2 id="timers" className="admin-h">Timers</h2>
       <TimerAssign event={event} runners={runners} offerUndo={offerUndo} />
+      {timerNames.length > 0 && (
+        <TimerAutoAssign eventId={eventId} timers={timerNames} busy={busy} onApply={giveTimer}
+          heats={openHeats.map((h) => ({ id: h.id, name: h.name, runners: runners.filter((r) => r.heatId === h.id) })).filter((h) => h.runners.length)} />
+      )}
 
       <div className="row" style={{ alignItems: 'baseline' }}>
         <h2 id="list" className="admin-h grow">Start list</h2>
@@ -344,7 +353,8 @@ export default function RaceAdmin() {
       <button className="btn block" style={{ marginTop: 10 }} onClick={() => setShowAdd(!showAdd)} aria-expanded={showAdd}>
         {showAdd ? 'Close' : '+ Add a runner'}
       </button>
-      {showAdd && <AddRunner busy={busy} openHeats={openHeats} countIn={countIn} newNr={newNr} suggestFor={suggestFor} onAdd={add} />}
+      {showAdd && <AddRunner busy={busy} openHeats={openHeats} countIn={countIn} newNr={newNr} suggestFor={suggestFor} onAdd={add}
+        takenBibs={new Set(runners.map((r) => String(Number(r.bib))))} />}
 
       <div className="stack" style={{ marginTop: 14, gap: 18 }}>
         {sections.map((s) => (
@@ -417,28 +427,33 @@ function Check({ checked, onChange, children }) {
   )
 }
 
-function AddRunner({ busy, openHeats, countIn, newNr, suggestFor, onAdd }) {
+function AddRunner({ busy, openHeats, countIn, newNr, suggestFor, onAdd, takenBibs }) {
   const [kind, setKind] = useState('kvinne')
   const [name, setName] = useState('')
   const [team, setTeam] = useState('')
   const [partner, setPartner] = useState('')
   const [heatChoice, setHeatChoice] = useState(null) // null = follow the suggestion
+  const [bib, setBib] = useState('') // empty = the next free bib
   const relay = kind === 'stafett'
+  const bibNr = bib ? Number(bib) : null
+  const bibError = bibNr == null ? null
+    : bibNr < 1 || bibNr > 9999 ? 'A bib is a number from 1 to 9999.'
+      : takenBibs.has(String(bibNr)) ? `Bib ${bibNr} is already taken.` : null
   const heat = heatChoice === null ? suggestFor(CATEGORY[kind]) : heatChoice
-  const ready = name.trim() && (!relay || (team.trim() && partner.trim()))
+  const ready = name.trim() && (!relay || (team.trim() && partner.trim())) && !bibError
 
   async function submit(e) {
     e.preventDefault()
     if (!ready || busy) return
     // Kept on failure, so a refused name can be corrected instead of retyped.
-    if (await onAdd({ kind, name: name.trim(), team: team.trim(), partner: partner.trim(), heat: heat || null })) {
-      setName(''); setTeam(''); setPartner(''); setHeatChoice(null)
+    if (await onAdd({ kind, name: name.trim(), team: team.trim(), partner: partner.trim(), heat: heat || null, bib: bibNr })) {
+      setName(''); setTeam(''); setPartner(''); setHeatChoice(null); setBib('')
     }
   }
 
   return (
     <form className="card stack" style={{ marginTop: 10, gap: 10 }} onSubmit={submit}>
-      <div className="muted tiny">For someone who did not sign up. They get the next free bib and a sign-up on the race page too.</div>
+      <div className="muted tiny">For someone who did not sign up. They get a sign-up on the race page too, and the next free bib unless you give one.</div>
       <div className="row wrap" style={{ gap: 6 }} role="radiogroup" aria-label="Class">
         {KINDS.map(([k, label]) => (
           <button key={k} type="button" role="radio" aria-checked={kind === k} className={`chip${kind === k ? ' on' : ''}`} onClick={() => setKind(k)}>{label}</button>
@@ -447,6 +462,9 @@ function AddRunner({ busy, openHeats, countIn, newNr, suggestFor, onAdd }) {
       {relay && <input value={team} onChange={(e) => setTeam(e.target.value)} placeholder="Team name" aria-label="Team name" maxLength={60} />}
       <input value={name} onChange={(e) => setName(e.target.value)} placeholder={relay ? 'Runner 1' : 'Name'} aria-label={relay ? 'Runner 1' : 'Name'} maxLength={100} autoComplete="off" />
       {relay && <input value={partner} onChange={(e) => setPartner(e.target.value)} placeholder="Runner 2" aria-label="Runner 2" maxLength={100} autoComplete="off" />}
+      <input value={bib} onChange={(e) => setBib(e.target.value.replace(/\D/g, '').slice(0, 4))} inputMode="numeric"
+        placeholder="Bib (empty: the next free one)" aria-label="Bib" autoComplete="off" />
+      {bibError && <div className="form-error">{bibError}</div>}
       <select value={heat || ''} onChange={(e) => setHeatChoice(e.target.value ? Number(e.target.value) : 0)} aria-label="Heat">
         <option value="">No heat</option>
         {openHeats.map((h) => <option key={h.id} value={h.order + 1}>{h.name} ({countIn(h)})</option>)}

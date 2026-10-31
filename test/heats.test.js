@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS, groupOf, leastFull, planHeats, splitBetween } from '../src/lib/heats.js'
+import { DEFAULT_SETTINGS, groupOf, leastFull, planHeats, planTimers, splitBetween } from '../src/lib/heats.js'
 
 const runners = (n, category, from = 0) =>
   Array.from({ length: n }, (_, i) => ({ id: `${category}-${from + i}`, category }))
@@ -54,5 +54,22 @@ describe('splitBetween', () => {
   it('handles more timers than runners, and no timers', () => {
     expect(splitBetween(runners(2, 'Menn'), ['A', 'B', 'C']).map((x) => x.timer)).toEqual(['A', 'B'])
     expect(splitBetween(runners(2, 'Menn'), [])).toEqual([])
+  })
+})
+
+describe('planTimers', () => {
+  const heats = [{ id: 'h1', runners: runners(7, 'Menn') }, { id: 'h2', runners: runners(3, 'Kvinner') }]
+
+  it('shares each heat evenly between the chosen timers, within the limit', () => {
+    const plan = planTimers(heats, ['A', 'B'], 4)
+    expect(plan[0].split.map((x) => x.timer)).toEqual(['A', 'A', 'A', 'A', 'B', 'B', 'B'])
+    expect(plan[1].split.map((x) => x.timer)).toEqual(['A', 'A', 'B'])
+    expect(plan.map((p) => p.left)).toEqual([0, 0])
+  })
+
+  it('leaves the last runners without a timer when a heat is bigger than the timers can take', () => {
+    const plan = planTimers(heats, ['A', 'B'], 3)
+    expect(plan[0].split.map((x) => x.timer)).toEqual(['A', 'A', 'A', 'B', 'B', 'B', null])
+    expect(plan[0].left).toBe(1)
   })
 })

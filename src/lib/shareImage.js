@@ -34,16 +34,33 @@ function longDate(iso) {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString('nb-NO', { day: 'numeric', month: 'long', year: 'numeric' })
 }
 
-// Up to two lines of a heading, breaking between words.
-function lines(ctx, text, max) {
-  const words = text.split(/\s+/)
+// A heading broken into lines between words, at the current font.
+function wrap(ctx, text, max) {
   const out = ['']
-  for (const w of words) {
+  for (const w of text.split(/\s+/).filter(Boolean)) {
     const tryLine = out[out.length - 1] ? `${out[out.length - 1]} ${w}` : w
     if (ctx.measureText(tryLine).width <= max || !out[out.length - 1]) out[out.length - 1] = tryLine
     else out.push(w)
   }
-  return out.length > 2 ? [out[0], fit(ctx, out.slice(1).join(' '), max)] : out
+  return out
+}
+
+// The race's name as big as it fits: the largest size that puts all of it on
+// two lines, a long name on three at the smallest size, and only a name too
+// long even for that is cut with "…". Sets ctx.font. Returns { size, lines }.
+const TITLE_SIZES = [92, 84, 76, 68, 60, 54, 48]
+function titleLayout(ctx, text, max) {
+  const fits = (ls) => ls.every((l) => ctx.measureText(l).width <= max)
+  for (const size of TITLE_SIZES) {
+    ctx.font = `${size}px ${ANTON}`
+    const ls = wrap(ctx, text, max)
+    if (ls.length <= 2 && fits(ls)) return { size, lines: ls }
+  }
+  const size = TITLE_SIZES[TITLE_SIZES.length - 1]
+  ctx.font = `${size}px ${ANTON}`
+  const ls = wrap(ctx, text, max)
+  if (ls.length <= 3 && fits(ls)) return { size, lines: ls }
+  return { size, lines: [...ls.slice(0, 2), fit(ctx, ls.slice(2).join(' '), max)].filter(Boolean).map((l) => fit(ctx, l, max)) }
 }
 
 function loadImage(src) {
@@ -95,8 +112,8 @@ export async function drawResults({ title, date, podiums, mascot = false }) {
   ctx.fillText('RESULTATER', PAD, y)
   y += 24
   ctx.fillStyle = C.text
-  ctx.font = `92px ${ANTON}`
-  for (const l of lines(ctx, (title || '').toUpperCase(), titleW)) { y += 100; ctx.fillText(l, PAD, y) }
+  const head = titleLayout(ctx, (title || '').toUpperCase(), titleW)
+  for (const l of head.lines) { y += Math.round(head.size * 1.09); ctx.fillText(l, PAD, y) }
   if (date) {
     y += 52
     ctx.fillStyle = C.muted

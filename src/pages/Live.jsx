@@ -4,6 +4,9 @@ import { useStore, standings, heatsInEvent } from '../lib/store.js'
 import { fmt, fmtShort } from '../lib/time.js'
 import { useOnlineSync } from '../lib/online.js'
 
+// The ways out of a race, in the order the results list them.
+const OUT = [['dnf', 'Did not finish'], ['dns', 'Did not start'], ['dq', 'Disqualified']]
+
 export default function Live() {
   const { eventId } = useParams()
   const data = useStore((s) => standings(s, eventId))
@@ -178,20 +181,26 @@ export default function Live() {
         </>
       )}
 
-      {shownDnf.length > 0 && (
-        <>
-          <h2 className="sec-head">Did not finish</h2>
-          <div className="list">
-            {shownDnf.map((r) => (
-              <div className="item" key={r.runner.id}>
-                <span className="bib">{r.runner.bib}</span>
-                <span className="name grow">{r.runner.name}</span>
-                <span className="pill">{r.status.toUpperCase()}</span>
-              </div>
-            ))}
+      {/* Out of the race, each under what happened: a DNS never started, so
+          one list called "Did not finish" said the wrong thing about them. */}
+      {OUT.map(([status, title]) => {
+        const list = shownDnf.filter((r) => r.status === status)
+        if (!list.length) return null
+        return (
+          <div key={status}>
+            <h2 className="sec-head">{title}</h2>
+            <div className="list">
+              {list.map((r) => (
+                <div className="item" key={r.runner.id}>
+                  <span className="bib">{r.runner.bib}</span>
+                  <span className="name grow">{r.runner.name}</span>
+                  <span className="pill">{r.status.toUpperCase()}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        </>
-      )}
+        )
+      })}
 
       {(shownFinishers.length > 0 || shownDnf.length > 0) && (
         <button className="btn block" style={{ marginTop: 22 }} onClick={exportCsv}>
