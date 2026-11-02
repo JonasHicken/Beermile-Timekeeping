@@ -2,8 +2,8 @@
 
 [![Test](https://github.com/JonasHicken/Beermile-Timekeeping/actions/workflows/test.yml/badge.svg)](https://github.com/JonasHicken/Beermile-Timekeeping/actions/workflows/test.yml)
 
-> **🚧 Still in development.** The core works end to end and runs offline, but
-> it has not yet timed a real race. Expect rough edges and breaking changes to
+> **🚧 Still in development.** The core works end to end and runs offline, 
+> it has been tested on one real race with 40 participants, worked well. Expect rough edges and breaking changes to
 > the data format until it has.
 
 Mobile-first race timing for beer miles. **Tap timing, live results, RFID-ready.**
