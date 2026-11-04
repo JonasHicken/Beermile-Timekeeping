@@ -3,8 +3,11 @@
 //   npm run icons                 # uses public/logo-source.png
 //   npm run icons -- path/to.png  # or an explicit source
 //
-// The source is a sticker-style illustration on a WHITE background that also
-// has a WHITE keyline around the figure. We flood-fill inward from the image
+// The current source is public/logo-source.png, the logo on a transparent
+// background with its own light outline, which is used as it is.
+//
+// A source without transparency is treated as a sticker-style illustration on a
+// WHITE background with a WHITE keyline around the figure. We flood-fill inward from the image
 // border, so only white *connected to the edge* becomes transparent — white
 // enclosed by the dark linework (helmet, the stars on the horn) survives.
 //
@@ -137,10 +140,11 @@ async function square(buf, size) {
     .toBuffer()
 }
 
-const cut = await removeBackground(src)
+const { hasAlpha } = await sharp(src).metadata()
+const cut = hasAlpha ? await sharp(src).png().toBuffer() : await removeBackground(src)
 // Trim the now-transparent margin so the art fills the icon.
 const bare = await sharp(cut).trim({ threshold: 1 }).png().toBuffer()
-const trimmed = await addKeyline(bare)
+const trimmed = hasAlpha ? bare : await addKeyline(bare)
 
 await sharp(trimmed).toFile(path.join(pub, 'logo.png'))
 
