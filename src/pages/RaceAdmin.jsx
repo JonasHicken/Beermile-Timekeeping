@@ -11,7 +11,8 @@ import SyncBadge from '../components/SyncBadge.jsx'
 import RaceResults from '../components/RaceResults.jsx'
 import TimerAutoAssign from '../components/TimerAutoAssign.jsx'
 import RaceImport from '../components/RaceImport.jsx'
-import NumberField, { ordinal } from '../components/NumberField.jsx'
+import { ordinal } from '../components/NumberField.jsx'
+import RaceDetails from '../components/RaceDetails.jsx'
 
 // Race day for a shared race, on the admin link: late runners, heats, bibs and
 // timers. The race itself (sign-ups, links, results on the race page) is run
@@ -39,6 +40,7 @@ export default function RaceAdmin() {
   const [showBibs, setShowBibs] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
   const [showImport, setShowImport] = useState(false)
+  const [editing, setEditing] = useState(null) // runner id
   // Results first once every heat is done; the start list before that.
   const [tab, setTab] = useState(() => {
     const hs = heatsInEvent(getState(), eventId)
@@ -247,6 +249,22 @@ export default function RaceAdmin() {
     return false
   }
 
+  // ---- a runner's name and class ----
+  async function rename(r, to) {
+    const from = r.name
+    if (!to || to === from) return true
+    if (await call('tk_admin_rett_resultat', { p_runner_id: r.id, p_navn: to }) === undefined) return false
+    undoable(`Name: ${to}`, () => call('tk_admin_rett_resultat', { p_runner_id: r.id, p_navn: from }))
+    return true
+  }
+  async function reclass(r, kjonn) {
+    const from = r.category === 'Kvinner' ? 'kvinne' : 'mann'
+    if (kjonn === from) return true
+    if (await call('tk_admin_sett_klasse', { p_runner_id: r.id, p_kjonn: kjonn }) === undefined) return false
+    undoable(`${r.name}: ${kjonn === 'kvinne' ? 'Women' : 'Men'}`, () => call('tk_admin_sett_klasse', { p_runner_id: r.id, p_kjonn: from }))
+    return true
+  }
+
   // ---- bibs ----
   async function changeBib(r) {
     const input = window.prompt(`New bib for ${r.name || r.bib}:`, r.bib)
@@ -347,15 +365,8 @@ export default function RaceAdmin() {
         ))}
       </div>
 
-      <div className="card row" style={{ marginTop: 14, gap: 12 }}>
-        <div className="grow">
-          <div style={{ fontWeight: 700 }}>Laps</div>
-          <div className="muted tiny">For every runner in the race. Penalty laps come on top.</div>
-        </div>
-        <div style={{ width: 80 }}>
-          <NumberField value={event.numLaps ?? 4} min={1} max={20} onCommit={changeLaps} label="Laps" />
-        </div>
-      </div>
+      <h2 id="race" className="admin-h">Race</h2>
+      <RaceDetails event={event} runnerCount={runners.length} busy={busy} call={call} undoable={undoable} say={say} onLaps={changeLaps} />
 
       <h2 id="heats" className="admin-h">Heats</h2>
       {runners.length > 0 ? (
@@ -451,15 +462,22 @@ export default function RaceAdmin() {
                   <div className="row" style={{ gap: 8 }}>
                     <button className="btn ghost sm" style={{ minWidth: 56, borderStyle: 'dashed' }} disabled={busy}
                       onClick={() => changeBib(r)} aria-label={`Change bib ${r.bib}`}>{r.bib}</button>
-                    <span className="grow" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <button className="runner-name grow" disabled={busy} onClick={() => setEditing(editing === r.id ? null : r.id)}
+                      aria-expanded={editing === r.id} aria-label={`Edit ${r.name}`}>
                       {r.name}<span className="muted tiny"> · {r.category}</span>
-                    </span>
+                    </button>
                     {/* In a heat that has started only the timer can change: the
                         heading already says it has started, and the runner stays. */}
                     {locked(r) ? timerSelect : (
                       <button className="t-more" disabled={busy} onClick={() => askRemove(r)} aria-label={`Remove ${r.name}`}>✕</button>
                     )}
                   </div>
+                  {editing === r.id && (
+                    <RunnerEdit runner={r} busy={busy} onClose={() => setEditing(null)}
+                      onSave={async (name, kjonn) => {
+                        if (await rename(r, name) && (kjonn == null || await reclass(r, kjonn))) setEditing(null)
+                      }} />
+                  )}
                   {!locked(r) && (
                     <div className="row" style={{ gap: 8, marginTop: 6 }}>
                       <select className="grow" value={nrOf(r) ?? ''} disabled={busy}
@@ -483,6 +501,33 @@ export default function RaceAdmin() {
       {confirmNode}
       {undoNode}
       {note && <div className="toast" role="status"><span>{note.text}</span></div>}
+    </div>
+  )
+}
+
+// A runner's name and class, edited in the start list. A relay team keeps its
+// class; its name is written "Team (Runner og Runner)".
+function RunnerEdit({ runner, busy, onSave, onClose }) {
+  const relay = runner.category === 'Stafett'
+  const [name, setName] = useState(runner.name)
+  const [kjonn, setKjonn] = useState(runner.category === 'Kvinner' ? 'kvinne' : 'mann')
+  const n = name.trim()
+  return (
+    <div className="stack" style={{ gap: 8, marginTop: 8, padding: '8px 0' }}>
+      <div className="row" style={{ gap: 8 }}>
+        <input className="grow" value={name} maxLength={100} onChange={(e) => setName(e.target.value)} aria-label="Name" style={{ minWidth: 0 }} />
+        {!relay && (
+          <select value={kjonn} onChange={(e) => setKjonn(e.target.value)} aria-label="Class" style={{ flex: '0 0 110px' }}>
+            <option value="kvinne">Women</option>
+            <option value="mann">Men</option>
+          </select>
+        )}
+      </div>
+      {relay && <div className="muted tiny">A relay team is written “Team (Runner og Runner)”.</div>}
+      <div className="row" style={{ gap: 8 }}>
+        <button className="btn ghost grow" onClick={onClose}>Cancel</button>
+        <button className="btn primary grow" disabled={busy || !n} onClick={() => onSave(n, relay ? null : kjonn)}>Save</button>
+      </div>
     </div>
   )
 }
