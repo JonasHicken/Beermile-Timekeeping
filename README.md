@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/logo.png" width="140" alt="Beermile Timekeeping logo: a viking runner blowing a horn">
+</p>
+
 # Beermile Timekeeping
 
 [![Test](https://github.com/JonasHicken/Beermile-Timekeeping/actions/workflows/test.yml/badge.svg)](https://github.com/JonasHicken/Beermile-Timekeeping/actions/workflows/test.yml)
@@ -7,6 +11,8 @@
 > the data format until it has.
 
 Mobile-first race timing for beer miles. **Tap timing, live results, RFID-ready.**
+
+**Live app:** [tidtaking.beermilenorge.no](https://tidtaking.beermilenorge.no) — open it on a phone and add it to the home screen.
 
 <p align="center">
   <img src="docs/screenshots/timing.png" width="250" alt="Timing a heat: one tile per runner, laps filling in as they are tapped">
@@ -85,6 +91,9 @@ file** (`.xlsx` / `.csv`) → **Auto-split** into heats → open a heat → **ST
 tap tiles as runners cross → **Results**.
 
 Works offline with zero configuration. Data lives in your browser.
+
+To try it without installing anything, use the hosted version at
+[tidtaking.beermilenorge.no](https://tidtaking.beermilenorge.no).
 
 ### Tests
 
@@ -186,7 +195,7 @@ alone would not stop the public key reading every entrant's address.
 - [x] Software core: start list, tap timing, laps, undo, live standings (offline)
 - [x] Import start lists from Excel / CSV
 - [x] Shared races: several phones timing one race
-- [x] Admin and timer links, timer codes, Race admin (heats, bibs, late runners, timers)
+- [x] Admin and timer links, timer codes, Race admin (start list import, heats, bibs, late runners, timers)
 - [x] Results: fastest laps, top-3 picture to share, export to a records list
 - [ ] Shared races without the companion website: the race functions in this repo's schema
 - [ ] RFID input module: reader bridge → same crossings log → hands-off + lap splits
@@ -202,6 +211,7 @@ alone would not stop the public key reading every entrant's address.
 | `src/lib/online.js` | Shared-race sync loop (outbox out, changes in), links and timer codes |
 | `src/lib/heats.js` | Heat planning and splitting runners between timers |
 | `src/lib/bibs.js` | Assigning bibs in blocks per class |
+| `src/lib/raceImport.js` | Reading an imported start list into sign-ups for a shared race |
 | `src/lib/raceResults.js` | Fastest laps, top three per class, times for a records list |
 | `src/lib/shareImage.js` | The results picture for social media |
 | `src/lib/sync.js` | Supabase publish + public read/realtime (gated on write access) |
@@ -217,9 +227,9 @@ alone would not stop the public key reading every entrant's address.
 
 ## Licence
 
-MIT — see [LICENSE](LICENSE). The mascot artwork (`public/logo*` and
-`public/mascot-cheer.svg`) is **not** covered by it and remains the property of
-its author.
+MIT — see [LICENSE](LICENSE). The logo and mascot artwork (`public/logo*`,
+the app icons and favicons, and `public/mascot-cheer.svg`) is **not** covered
+by it and remains the property of its author.
 
 ## Third-party
 

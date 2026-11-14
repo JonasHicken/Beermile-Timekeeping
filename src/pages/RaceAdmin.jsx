@@ -10,6 +10,7 @@ import TimerAssign from '../components/TimerAssign.jsx'
 import SyncBadge from '../components/SyncBadge.jsx'
 import RaceResults from '../components/RaceResults.jsx'
 import TimerAutoAssign from '../components/TimerAutoAssign.jsx'
+import RaceImport from '../components/RaceImport.jsx'
 
 // Race day for a shared race, on the admin link: late runners, heats, bibs and
 // timers. The race itself (sign-ups, links, results on the race page) is run
@@ -36,6 +37,7 @@ export default function RaceAdmin() {
   const [note, setNote] = useState(null) // { text, error }
   const [showBibs, setShowBibs] = useState(false)
   const [showAdd, setShowAdd] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   // Results first once every heat is done; the start list before that.
   const [tab, setTab] = useState(() => {
     const hs = heatsInEvent(getState(), eventId)
@@ -191,6 +193,30 @@ export default function RaceAdmin() {
     onConfirm: () => remove(r),
   })
 
+  // A start list from a file: every row in one call, each added like
+  // "Add a runner". Undo removes the ones added, by bib.
+  async function importRows(list) {
+    const res = await call('tk_admin_importer_lopere', { p_rader: list.map((x) => x.signup) })
+    if (res === undefined) return
+    setShowImport(false)
+    const added = res.lagt_til ?? []
+    const skipped = res.hoppet_over ?? []
+    const moved = added.filter((a) => {
+      const asked = list[a.rad - 1]?.signup.startnummer
+      return asked != null && String(asked) !== String(a.bib)
+    }).length
+    say([
+      `Added ${plural(added.length, 'runner')}.`,
+      skipped.length ? `${skipped.length} not added: ${[...new Set(skipped.map((x) => (/allerede påmeldt/.test(x.grunn) ? 'name already in the race' : x.grunn)))].slice(0, 2).join('; ')}.` : '',
+      moved ? `${moved} got another bib than in the file.` : '',
+    ].filter(Boolean).join(' '), skipped.length > 0)
+    if (!added.length) return
+    undoable(`Imported ${plural(added.length, 'runner')}`, async () => {
+      const r = await call('tk_admin_fjern_lopere', { p_bibs: added.map((a) => String(a.bib)) })
+      if (r?.beholdt) say(`${r.beholdt} kept: they have run a lap since.`, true)
+    })
+  }
+
   // ---- bibs ----
   async function changeBib(r) {
     const input = window.prompt(`New bib for ${r.name || r.bib}:`, r.bib)
@@ -333,7 +359,7 @@ export default function RaceAdmin() {
           <div className="muted tiny">Heats that have started are left alone. A relay team takes one place.</div>
         </div>
       ) : (
-        <div className="muted">No runners yet. Bring in the sign-ups on the race website, or add runners in the start list below.</div>
+        <div className="muted">No runners yet. Bring in the sign-ups on the race website, or import a list or add runners in the start list below.</div>
       )}
 
       <h2 id="timers" className="admin-h">Timers</h2>
@@ -345,7 +371,10 @@ export default function RaceAdmin() {
 
       <div className="row" style={{ alignItems: 'baseline' }}>
         <h2 id="list" className="admin-h grow">Start list</h2>
-        <button className="btn ghost sm" onClick={() => setShowBibs(!showBibs)} aria-expanded={showBibs}>Assign bibs</button>
+        <span className="row" style={{ gap: 6 }}>
+          <button className="btn ghost sm" disabled={busy} onClick={() => setShowImport(true)}>Import</button>
+          <button className="btn ghost sm" onClick={() => setShowBibs(!showBibs)} aria-expanded={showBibs}>Assign bibs</button>
+        </span>
       </div>
       {showBibs && <BibAssign eventId={eventId} runners={runners} onClose={() => setShowBibs(false)} onApply={applyBibs} />}
       <div className="muted tiny">Tap a bib to change it. Every change reaches the timers’ phones within seconds and can be undone.</div>
@@ -410,6 +439,7 @@ export default function RaceAdmin() {
       </div>
       </>}
 
+      {showImport && <RaceImport runners={runners} busy={busy} onClose={() => setShowImport(false)} onImport={importRows} />}
       {confirmNode}
       {undoNode}
       {note && <div className="toast" role="status"><span>{note.text}</span></div>}
