@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { useStore, getEvent, getState, runnersInEvent, heatsInEvent, roleOf } from '../lib/store.js'
+import { useStore, getEvent, getState, runnersInEvent, heatsInEvent, roleOf, standings } from '../lib/store.js'
 import { adminCall, useOnlineSync, NotAdminError } from '../lib/online.js'
 import { DEFAULT_SETTINGS, GROUPS, groupOf, leastFull, planHeats, splitBetween } from '../lib/heats.js'
 import { useConfirm } from '../components/Confirm.jsx'
@@ -11,6 +11,7 @@ import SyncBadge from '../components/SyncBadge.jsx'
 import RaceResults from '../components/RaceResults.jsx'
 import TimerAutoAssign from '../components/TimerAutoAssign.jsx'
 import RaceImport from '../components/RaceImport.jsx'
+import NumberField, { ordinal } from '../components/NumberField.jsx'
 
 // Race day for a shared race, on the admin link: late runners, heats, bibs and
 // timers. The race itself (sign-ups, links, results on the race page) is run
@@ -217,6 +218,35 @@ export default function RaceAdmin() {
     })
   }
 
+  // ---- laps ----
+  // Every result is worked out from the lap count, so once laps are recorded
+  // a change moves every result at once: it asks first, and can be undone.
+  function changeLaps(n) {
+    const was = event.numLaps
+    if (n === was) return true
+    const apply = async () => {
+      if (await call('tk_admin_sett_runder', { p_runder: n }) === undefined) return
+      undoable(`Laps: ${was} → ${n}`, () => call('tk_admin_sett_runder', { p_runder: was }))
+    }
+    const timed = getState().crossings.some((c) => c.eventId === eventId && !c.void)
+    if (!timed) { apply(); return true }
+    const finished = standings(getState(), eventId).finishers.length
+    askConfirm({
+      title: `Change to ${plural(n, 'lap')}?`,
+      body:
+        'Laps are already recorded. Every result is worked out from the lap count, so ' +
+        (n > was
+          ? `runners who finished ${plural(was, 'lap')} count as still on course until a ${ordinal(n)} lap is recorded` +
+            (finished ? ` (${plural(finished, 'runner')} finished right now).` : '.')
+          : `runners finish after ${plural(n, 'lap')}, and their time becomes their ${ordinal(n)} lap; later laps no longer count.`) +
+        ' Every phone and the race page change with it. Penalty laps still come on top.',
+      confirmLabel: `Change to ${n}`,
+      danger: true,
+      onConfirm: apply,
+    })
+    return false
+  }
+
   // ---- bibs ----
   async function changeBib(r) {
     const input = window.prompt(`New bib for ${r.name || r.bib}:`, r.bib)
@@ -315,6 +345,16 @@ export default function RaceAdmin() {
             <span className="grow">{x.text}</span>
           </button>
         ))}
+      </div>
+
+      <div className="card row" style={{ marginTop: 14, gap: 12 }}>
+        <div className="grow">
+          <div style={{ fontWeight: 700 }}>Laps</div>
+          <div className="muted tiny">For every runner in the race. Penalty laps come on top.</div>
+        </div>
+        <div style={{ width: 80 }}>
+          <NumberField value={event.numLaps ?? 4} min={1} max={20} onCommit={changeLaps} label="Laps" />
+        </div>
       </div>
 
       <h2 id="heats" className="admin-h">Heats</h2>
