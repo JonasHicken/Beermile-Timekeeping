@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js'
 import { useState } from 'react'
 
 // A race time as two boxes, minutes and seconds, instead of one "m:ss.d" field.
@@ -16,7 +17,7 @@ export default function TimeInput({ initialMs = null, submitLabel = 'Set', onSub
     const m = mins.trim() === '' ? 0 : Number(mins)
     const s = Number(secs.trim().replace(',', '.'))
     if (secs.trim() === '' || !Number.isInteger(m) || m < 0 || !Number.isFinite(s) || s < 0 || s >= 60) {
-      setError('Enter whole minutes, and seconds under 60 — for example 7 and 06.8.')
+      setError(t('Enter whole minutes, and seconds under 60, for example 7 and 06.8.'))
       return
     }
     const msg = onSubmit(Math.round(m * 60000 + s * 1000))
@@ -35,8 +36,8 @@ export default function TimeInput({ initialMs = null, submitLabel = 'Set', onSub
           onKeyDown={onKey}
           inputMode="numeric"
           pattern="[0-9]*"
-          placeholder="min"
-          aria-label="Minutes"
+          placeholder={t('min')}
+          aria-label={t('Minutes')}
         />
         <span className="t-colon">:</span>
         <input
@@ -45,8 +46,8 @@ export default function TimeInput({ initialMs = null, submitLabel = 'Set', onSub
           onChange={(e) => { setSecs(e.target.value.replace(/[^\d.,]/g, '')); setError('') }}
           onKeyDown={onKey}
           inputMode="decimal"
-          placeholder="ss.d"
-          aria-label="Seconds"
+          placeholder={t('ss.d')}
+          aria-label={t('Seconds')}
         />
         <button type="button" className="btn" onClick={submit}>{submitLabel}</button>
       </div>

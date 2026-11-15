@@ -1,3 +1,4 @@
+import { t, plural } from '../lib/i18n.js'
 import { useRef, useState } from 'react'
 import { parseFile, parseDelimited, detectDelimiter, guessMapping, toRunnerRows } from '../lib/parseTable.js'
 import { useStore, runnersInEvent, importRunnerRows, classifyImport } from '../lib/store.js'
@@ -26,7 +27,7 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
   const existingBibs = useStore((s) => runnersInEvent(s, eventId).map((r) => r.bib))
 
   function ingest(parsed, label) {
-    if (!parsed.length) { setError('That file had no readable rows.'); return }
+    if (!parsed.length) { setError(t('That file had no readable rows.')); return }
     const { hasHeader: hh, mapping: m } = guessMapping(parsed)
     setRows(parsed)
     setHasHeader(hh)
@@ -42,7 +43,7 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
     try {
       ingest(await parseFile(file), file.name)
     } catch (e) {
-      setError(`Could not read that file: ${e?.message || e}`)
+      setError(t('Could not read that file: {why}', { why: e?.message || e }))
     } finally {
       setBusy(false)
     }
@@ -50,7 +51,7 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
 
   function usePaste() {
     const t = pasteText.trim()
-    if (!t) { setError('Nothing pasted yet.'); return }
+    if (!t) { setError(t('Nothing pasted yet.')); return }
     ingest(parseDelimited(t, detectDelimiter(t)), 'pasted text')
   }
 
@@ -71,18 +72,17 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
   return (
     <>
       <div className="sheet-backdrop" onClick={onClose} />
-      <div className="sheet import" role="dialog" aria-modal="true" aria-label="Import start list">
+      <div className="sheet import" role="dialog" aria-modal="true" aria-label={t('Import start list')}>
         <div className="sheet-grip" />
         <div className="row">
-          <div className="display grow" style={{ fontSize: 23 }}>Import start list</div>
-          <button className="btn ghost" onClick={onClose} aria-label="Close">✕</button>
+          <div className="display grow" style={{ fontSize: 23 }}>{t('Import start list')}</div>
+          <button className="btn ghost" onClick={onClose} aria-label={t('Close')}>✕</button>
         </div>
 
         {!rows && (
           <>
             <p className="muted" style={{ margin: '10px 0 16px' }}>
-              Excel (.xlsx) or CSV. Exporting to CSV from Excel in Norwegian gives
-              semicolons — that's handled.
+              {t('Excel (.xlsx) or CSV. Exporting to CSV from Excel in Norwegian gives semicolons; that is handled.')}
             </p>
 
             <input
@@ -93,10 +93,10 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
               onChange={(e) => onFile(e.target.files?.[0])}
             />
             <button className="btn primary block lg" disabled={busy} onClick={() => fileRef.current?.click()}>
-              {busy ? 'Reading…' : 'Choose file'}
+              {busy ? t('Reading…') : t('Choose file')}
             </button>
 
-            <div className="or-line"><span>or paste rows</span></div>
+            <div className="or-line"><span>{t('or paste rows')}</span></div>
 
             <textarea
               rows={5}
@@ -105,7 +105,7 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
               placeholder={'14, Ola Nordmann, OSI\n27, Kari Berg, BUL\n33, Per Hansen'}
             />
             <button className="btn block" style={{ marginTop: 10 }} onClick={usePaste}>
-              Use pasted rows
+              {t('Use pasted rows')}
             </button>
           </>
         )}
@@ -113,12 +113,12 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
         {rows && mapping && (
           <>
             <div className="muted tiny" style={{ margin: '8px 0 14px', textTransform: 'uppercase', letterSpacing: '.08em' }}>
-              {sourceName} · {rows.length} rows · {columnCount} columns
+              {sourceName} · {plural(rows.length, 'row')} · {plural(columnCount, 'column')}
             </div>
 
             <button className="toggle" onClick={() => setHasHeader((v) => !v)}>
               <span className={`toggle-box${hasHeader ? ' on' : ''}`} />
-              First row is a header
+              {t('First row is a header')}
             </button>
 
             <div className="map-grid">
@@ -131,10 +131,10 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
                     value={mapping[f.key]}
                     onChange={(e) => setMapping({ ...mapping, [f.key]: Number(e.target.value) })}
                   >
-                    <option value={-1}>— none —</option>
+                    <option value={-1}>{t('— none —')}</option>
                     {Array.from({ length: columnCount }).map((_, i) => (
                       <option key={i} value={i}>
-                        {hasHeader && rows[0][i] ? rows[0][i] : `Column ${i + 1}`}
+                        {hasHeader && rows[0][i] ? rows[0][i] : `${t('Column')} ${i + 1}`}
                       </option>
                     ))}
                   </select>
@@ -144,14 +144,14 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
 
             {mapping.bib < 0 && (
               <div className="form-error" style={{ marginTop: 10 }}>
-                Pick which column holds the bib number.
+                {t('Pick which column holds the bib number.')}
               </div>
             )}
 
             {preview.length > 0 && (
               <>
                 <span className="label" style={{ marginTop: 18 }}>
-                  Preview · {plan.ok.length} runners
+                  {t('Preview')} · {plural(plan.ok.length, 'runner')}
                 </span>
                 {skipped > 0 && (
                   <div className="form-error" style={{ marginBottom: 10 }}>
@@ -176,7 +176,7 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
                     <div className="item" key={i}>
                       <span className="bib">{r.bib || '—'}</span>
                       <span className="grow">
-                        {r.name || <span className="muted">no name</span>}
+                        {r.name || <span className="muted">{t('no name')}</span>}
                         {(r.club || r.category) && (
                           <span className="muted tiny"> · {[r.club, r.category].filter(Boolean).join(' · ')}</span>
                         )}
@@ -184,7 +184,7 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
                     </div>
                   ))}
                   {preview.length > 4 && (
-                    <div className="muted tiny center">+ {preview.length - 4} more</div>
+                    <div className="muted tiny center">+ {preview.length - 4} {t('more')}</div>
                   )}
                 </div>
               </>
@@ -193,21 +193,21 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
             {existingCount > 0 && (
               <button className="toggle" style={{ marginTop: 14 }} onClick={() => setReplace((v) => !v)}>
                 <span className={`toggle-box${replace ? ' on' : ''}`} />
-                Replace the {existingCount} runners already here
+                {t('Replace the {n} runners already here', { n: existingCount })}
               </button>
             )}
             {replace && (
               <div className="form-error">
-                This clears the current start list, its heats and any recorded timing.
+                {t('This clears the current start list, its heats and any recorded timing.')}
               </div>
             )}
 
             <div className="row" style={{ marginTop: 18 }}>
               <button className="btn ghost grow" onClick={() => { setRows(null); setMapping(null) }}>
-                Back
+                {t('Back')}
               </button>
               <button className="btn primary grow" disabled={!canImport} onClick={doImport}>
-                Import {plan.ok.length}
+                {t('Import {n}', { n: plan.ok.length })}
               </button>
             </div>
           </>

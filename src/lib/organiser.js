@@ -1,3 +1,4 @@
+import { t } from './i18n.js'
 // Organisers: logged in by a link sent by email (Supabase Auth), so they can
 // create shared races and find them again on any phone. Timing itself needs
 // no login: the admin and timer links do that.
@@ -28,7 +29,7 @@ export function useOrganiser() {
 
 async function client() {
   const sb = await getSupabase()
-  if (!sb) throw new Error('This app is not connected to a database.')
+  if (!sb) throw new Error(t('This app is not connected to a database.'))
   return sb
 }
 

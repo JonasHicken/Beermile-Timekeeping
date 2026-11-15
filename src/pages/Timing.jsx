@@ -1,3 +1,4 @@
+import { t, plural } from '../lib/i18n.js'
 import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
@@ -98,8 +99,8 @@ export default function Timing() {
   if (!event || !heat) {
     return (
       <div className="app">
-        <Link to={`/event/${eventId}/setup`} className="backlink">← Setup</Link>
-        <div className="empty">Heat not found.</div>
+        <Link to={`/event/${eventId}/setup`} className="backlink">{t('← Setup')}</Link>
+        <div className="empty">{t('Heat not found.')}</div>
       </div>
     )
   }
@@ -144,7 +145,7 @@ export default function Timing() {
       if (heat.status === 'done') showToast('Heat finished · Reopen to record laps')
       return
     }
-    if (row.out) { showToast(`${row.runner.bib} is ${row.status.toUpperCase()}`); return }
+    if (row.out) { showToast(`${row.runner.bib}: ${row.status.toUpperCase()}`); return }
     const c = recordCrossing(heatId, row.runner.id, 'tap')
     if (!c) return
     const bib = row.runner.bib
@@ -154,30 +155,30 @@ export default function Timing() {
     if (c.otherTimer) {
       // Both phones stamp server time, so the other tap can even be a hair
       // *later* than this one by the time it arrives; that reads "just now".
-      const when = c.sinceMs < 1000 ? 'just now' : `${secs(c.sinceMs)} ago`
-      showToast(`${bib} was already tapped by another timer ${when}. Not counted twice.`, null, 3500)
+      const when = c.sinceMs < 1000 ? t('just now') : t('{s} ago', { s: secs(c.sinceMs) })
+      showToast(t('{bib} was already tapped by another timer {when}. Not counted twice.', { bib, when }), null, 3500)
       return
     }
     if (c.afterFinish) {
-      showToast(`${bib} already finished ${secs(c.sinceMs)} ago. Is this the real finish?`, {
-        label: 'Use as finish',
-        run: () => { acceptRejectedTap(c.id); showToast(`${bib} · finish moved to this tap`) },
+      showToast(t('{bib} already finished {s} ago. Is this the real finish?', { bib, s: secs(c.sinceMs) }), {
+        label: t('Use as finish'),
+        run: () => { acceptRejectedTap(c.id); showToast(t('{bib} · finish moved to this tap', { bib })) },
       })
       return
     }
     // Held-back taps are kept in the log either way; these offer the one-step
     // fix while the timer still remembers what just happened.
     if (c.duplicate) {
-      showToast(`${bib} already had a lap ${secs(c.sinceMs)} ago. Was that one a mis-tap?`, {
-        label: 'Use this tap',
-        run: () => { acceptRejectedTap(c.id); showToast(`${bib} · lap moved to this tap`) },
+      showToast(t('{bib} already had a lap {s} ago. Was that one a mis-tap?', { bib, s: secs(c.sinceMs) }), {
+        label: t('Use this tap'),
+        run: () => { acceptRejectedTap(c.id); showToast(t('{bib} · lap moved to this tap', { bib })) },
       })
       return
     }
     if (c.tooSoon) {
-      showToast(`${bib}: only ${secs(c.sinceMs)} since ${row.done ? 'the last lap' : 'the start'}. Not counted.`, {
-        label: 'Count it',
-        run: () => { acceptRejectedTap(c.id); showToast(`${bib} · lap ${row.done + 1}`) },
+      showToast((row.done ? t('{bib}: only {s} since the last lap. Not counted.', { bib, s: secs(c.sinceMs) }) : t('{bib}: only {s} since the start. Not counted.', { bib, s: secs(c.sinceMs) })), {
+        label: t('Count it'),
+        run: () => { acceptRejectedTap(c.id); showToast(`${bib} · ${t('lap')} ${row.done + 1}`) },
       })
       return
     }
@@ -185,29 +186,29 @@ export default function Timing() {
     setTimeout(() => setFlashId((id) => (id === row.runner.id ? null : id)), 220)
     if (navigator.vibrate) navigator.vibrate(15)
     const nowDone = row.done + 1
-    showToast(nowDone >= row.need ? `${row.runner.bib} FINISHED` : `${row.runner.bib} · lap ${nowDone}`)
+    showToast(nowDone >= row.need ? `${row.runner.bib} ${t('FINISHED')}` : `${row.runner.bib} · ${t('lap')} ${nowDone}`)
   }
 
   function undo() {
     const last = undoLastCrossing(heatId)
     if (last) {
-      showToast(`Undo ${last.bib} · lap ${last.lap}`)
+      showToast(`${t('Undo')} ${last.bib} · ${t('lap')} ${last.lap}`)
       if (navigator.vibrate) navigator.vibrate([10, 40, 10])
-    } else showToast(online ? 'None of your taps to undo' : 'Nothing to undo')
+    } else showToast(online ? t('None of your taps to undo') : t('Nothing to undo'))
   }
 
   return (
     <div className="app timing">
       <div className="topbar">
         {timer
-          ? <span className="muted tiny">{event.online.me ? `Timing as ${event.online.me}` : 'Timer'}</span>
+          ? <span className="muted tiny">{event.online.me ? t('Timing as {name}', { name: event.online.me }) : t('Timer')}</span>
           : roleOf(event) === 'admin'
-            ? <Link to={`/event/${eventId}/admin?tab=live`} className="backlink">← Race admin</Link>
-            : <Link to={`/event/${eventId}/setup`} className="backlink">← Setup</Link>}
+            ? <Link to={`/event/${eventId}/admin?tab=live`} className="backlink">{t('← Race admin')}</Link>
+            : <Link to={`/event/${eventId}/setup`} className="backlink">{t('← Setup')}</Link>}
         <div className="spacer" />
         {online && <SyncBadge eventId={eventId} />}
-        <button className="btn ghost" onClick={() => nav(`/event/${eventId}/heat/${heatId}/review`)}>Review</button>
-        <button className="btn ghost" onClick={() => nav(`/event/${eventId}/live`)}>Results</button>
+        <button className="btn ghost" onClick={() => nav(`/event/${eventId}/heat/${heatId}/review`)}>{t('Review')}</button>
+        <button className="btn ghost" onClick={() => nav(`/event/${eventId}/live`)}>{t('Results')}</button>
       </div>
 
       {/* heat switcher — jump between heats without going back to Setup */}
@@ -230,7 +231,7 @@ export default function Timing() {
         <h1 style={{ margin: 0, fontSize: 26 }}>{heat.name}</h1>
         {/* Out of the runners still racing: a DNF is not a runner left to wait for. */}
         <span className="muted tiny">
-          {finishedCount}/{racingCount} finished{outCount > 0 && ` · ${outCount} out`}
+          {t('{n} finished', { n: `${finishedCount}/${racingCount}` })}{outCount > 0 && ` · ${t('{n} out', { n: outCount })}`}
         </span>
         <div className="spacer" />
         {running && <HeatClock startedAt={heat.startedAt} />}
@@ -238,8 +239,8 @@ export default function Timing() {
 
       {runners.length === 0 && (
         <div className="empty">
-          <div className="display">Empty heat</div>
-          Assign runners to it in Setup.
+          <div className="display">{t('Empty heat')}</div>
+          {t('Assign runners to it in Setup.')}
         </div>
       )}
 
@@ -249,24 +250,24 @@ export default function Timing() {
 
       {heat.status === 'pending' && runners.length > 0 && isAdmin && (
         <div className="card stack center" style={{ marginTop: 24, padding: 28 }}>
-          <div className="display" style={{ fontSize: 22 }}>{runners.length} on the line</div>
+          <div className="display" style={{ fontSize: 22 }}>{t('{n} on the line', { n: runners.length })}</div>
           <div className="muted">
-            Mass start — tap when the gun goes.
-            {online && " The timers' phones start by themselves."}
+            {t('Mass start: tap when the gun goes.')}
+            {online && ` ${t('The timers’ phones start by themselves.')}`}
           </div>
           {role === 'admin' && <TimerSummary runners={runners} names={event.online.timers ?? []} />}
           <button className="btn primary lg block" onClick={() => startHeat(heatId)}>
-            ▶ Start heat
+            {t('▶ Start heat')}
           </button>
         </div>
       )}
 
       {heat.status === 'pending' && timer && (
         <div className="card stack center" style={{ marginTop: 24, padding: 28 }}>
-          <div className="display" style={{ fontSize: 22 }}>Waiting for the start</div>
+          <div className="display" style={{ fontSize: 22 }}>{t('Waiting for the start')}</div>
           <div className="muted">
-            The admin starts the heat, and your phone starts with it.
-            {rows.length > 0 && ` You are timing ${plural(rows.length, 'runner')}:`}
+            {t('The admin starts the heat, and your phone starts with it.')}
+            {rows.length > 0 && ` ${t('You are timing {n}:', { n: plural(rows.length, 'runner') })}`}
           </div>
           {rows.length > 0 && (
             <div style={{ fontWeight: 700 }}>{rows.map((x) => x.runner.bib).join(', ')}</div>
@@ -280,13 +281,13 @@ export default function Timing() {
             {finishedCount > 0 && !picking && (
               <button className="toggle" onClick={() => setHideFinished((v) => !v)}>
                 <span className={`toggle-box${hideFinished ? ' on' : ''}`} />
-                Hide finished ({finishedCount})
+                {t('Hide finished ({n})', { n: finishedCount })}
               </button>
             )}
             {mineCount > 0 && !picking && (
               <button className="toggle" onClick={() => setOnlyMine((v) => !v)}>
                 <span className={`toggle-box${onlyMine ? ' on' : ''}`} />
-                Only mine ({mineCount})
+                {t('Only mine ({n})', { n: mineCount })}
               </button>
             )}
             <div className="spacer" />
@@ -294,21 +295,23 @@ export default function Timing() {
                 in a shared race; on one phone it was a row of dead space. */}
             {online && isAdmin && (
               <button className={`btn sm${picking ? ' primary' : ' ghost'}`} onClick={() => { setPicking((v) => !v); if (picking && mineCount) setOnlyMine(true) }}>
-                {picking ? 'Done' : 'Choose mine'}
+                {picking ? t('Done') : t('Choose mine')}
               </button>
             )}
           </div>
           {picking && (
             <div className="muted tiny" style={{ marginTop: 6 }}>
-              Tap the runners you are timing. Taps here only choose; no laps are recorded.
+              {t('Tap the runners you are timing. Taps here only choose; no laps are recorded.')}
             </div>
           )}
 
           {visible.length === 0 && !picking && hideFinished && (
             <div className="empty" style={{ padding: '28px 10px' }}>
-              <div className="display">Everyone is in</div>
-              All {plural(rows.length, 'runner')} in this heat {outCount ? `have finished or are out (${outCount} out)` : 'have finished'}.
-              Untick “Hide finished” to see their tiles and times.
+              <div className="display">{t('Everyone is in')}</div>
+              {outCount
+                ? t('All {n} in this heat have finished or are out ({out} out).', { n: plural(rows.length, 'runner'), out: outCount })
+                : t('All {n} in this heat have finished.', { n: plural(rows.length, 'runner') })}{' '}
+              {t('Untick “Hide finished” to see their tiles and times.')}
             </div>
           )}
 
@@ -330,36 +333,38 @@ export default function Timing() {
 
           {running && allIn && (
             <div className="heat-banner">
-              Everyone is in: {finishedCount} finished{outCount > 0 && `, ${outCount} out`}. {isAdmin ? 'Finish the heat when you are ready.' : 'The admin finishes the heat.'}
+              {outCount > 0
+                ? t('Everyone is in: {n} finished, {out} out.', { n: finishedCount, out: outCount })
+                : t('Everyone is in: {n} finished.', { n: finishedCount })}{' '}
+              {isAdmin ? t('Finish the heat when you are ready.') : t('The admin finishes the heat.')}
             </div>
           )}
 
           {running && (
             <div className="actionbar">
-              <button className="btn danger grow lg" onClick={undo}>↶ Undo</button>
+              <button className="btn danger grow lg" onClick={undo}>{t('↶ Undo')}</button>
               {isAdmin && <button
                 className="btn grow lg"
                 onClick={() =>
                   askConfirm(stillRacing.length
                     ? {
-                        title: `${plural(stillRacing.length, 'runner')} still racing`,
+                        title: t('{n} still racing', { n: plural(stillRacing.length, 'runner') }),
                         body:
-                          `${stillRacing.slice(0, 6).map((x) => `${x.runner.bib} (${x.done}/${x.need} laps)`).join(', ')}` +
-                          `${stillRacing.length > 6 ? ' …' : ''} ${stillRacing.length === 1 ? 'has' : 'have'} not finished. ` +
-                          'Finish anyway if they dropped out (mark them DNF), or keep timing. You can reopen the heat later.',
-                        confirmLabel: 'Finish anyway',
+                          t('{list} not finished yet.', { list: stillRacing.slice(0, 6).map((x) => `${x.runner.bib} (${x.done}/${x.need})`).join(', ') + (stillRacing.length > 6 ? ' …' : '') }) + ' ' +
+                          t('Finish anyway if they dropped out (mark them DNF), or keep timing. You can reopen the heat later.'),
+                        confirmLabel: t('Finish anyway'),
                         danger: true,
                         onConfirm: () => finishHeat(heatId),
                       }
                     : {
-                        title: 'Finish this heat?',
-                        body: 'Everyone is in. Timing stops; you can still review and correct it, or reopen the heat.',
+                        title: t('Finish this heat?'),
+                        body: t('Everyone is in. Timing stops; you can still review and correct it, or reopen the heat.'),
                         confirmLabel: 'Finish',
                         onConfirm: () => finishHeat(heatId),
                       })
                 }
               >
-                Finish heat
+                {t('Finish heat')}
               </button>}
             </div>
           )}
@@ -367,7 +372,7 @@ export default function Timing() {
           {heat.status === 'done' && !isAdmin && (
             <div className="actionbar">
               <button className="btn primary grow" onClick={() => nav(`/event/${eventId}/live`)}>
-                Results
+                {t('Results')}
               </button>
             </div>
           )}
@@ -376,27 +381,27 @@ export default function Timing() {
             <div className="actionbar">
               {/* Reopen keeps every crossing; Reset is the destructive one. */}
               <button className="btn grow" onClick={() => reopenHeat(heatId)}>
-                Reopen
+                {t('Reopen')}
               </button>
               <button
                 className="btn ghost danger"
                 onClick={() =>
                   askConfirm({
-                    title: `Reset ${heat.name}?`,
-                    body: 'Clears every lap recorded in this heat and returns it to the start line. You can undo it straight after.',
-                    confirmLabel: 'Reset heat',
+                    title: t('Reset {name}?', { name: heat.name }),
+                    body: t('Clears every lap recorded in this heat and returns it to the start line. You can undo it straight after.'),
+                    confirmLabel: t('Reset heat'),
                     danger: true,
                     onConfirm: () => {
                       const info = resetHeat(heatId)
-                      offerUndo(`Reset ${heat.name}`, () => undoReset(info))
+                      offerUndo(t('Reset {name}', { name: heat.name }), () => undoReset(info))
                     },
                   })
                 }
               >
-                Reset
+                {t('Reset')}
               </button>
               <button className="btn primary grow" onClick={() => nav(`/event/${eventId}/live`)}>
-                Results
+                {t('Results')}
               </button>
             </div>
           )}
@@ -429,14 +434,13 @@ export default function Timing() {
   )
 }
 
-const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
 // Who times whom in this heat, for the admin before the start.
 function TimerSummary({ runners, names }) {
-  if (!names.length) return <div className="muted tiny">No timers added yet, so only you can time this heat. Add them in Race admin.</div>
+  if (!names.length) return <div className="muted tiny">{t('No timers added yet, so only you can time this heat. Add them in Race admin.')}</div>
   const parts = names.map((n) => `${n} ${runners.filter((r) => r.timer === n).length}`)
   const nobody = runners.filter((r) => !r.timer).length
-  if (nobody) parts.push(`only you ${nobody}`)
+  if (nobody) parts.push(`${t('only you')} ${nobody}`)
   return <div className="muted tiny">{parts.join(' · ')}</div>
 }
 
@@ -478,7 +482,7 @@ function RunnerTile({ row, flash, elapsed, disabled, picking, isMine, onTap, onD
         <button
           className="t-more"
           onClick={(e) => { e.stopPropagation(); onDetail() }}
-          aria-label={`Options for ${runner.bib}`}
+          aria-label={t('Options for {bib}', { bib: runner.bib })}
         >
           ⋯
         </button>

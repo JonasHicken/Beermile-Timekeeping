@@ -1,3 +1,4 @@
+import { t, plural } from '../lib/i18n.js'
 import { useMemo, useState } from 'react'
 import { parseNumbers, planBibs, classesOf } from '../lib/bibs.js'
 
@@ -40,22 +41,22 @@ export default function BibAssign({ eventId, runners, onApply, onClose }) {
   return (
     <div className="card stack" style={{ marginTop: 10 }}>
       <div className="row" style={{ alignItems: 'baseline' }}>
-        <strong>Assign bibs by class</strong>
+        <strong>{t('Assign bibs by class')}</strong>
         <div className="spacer" />
-        <button className="btn ghost sm" onClick={onClose}>Close</button>
+        <button className="btn ghost sm" onClick={onClose}>{t('Close')}</button>
       </div>
       <div className="muted tiny">
-        Every class gets numbers that follow each other. Laps stay with the runner, so this is safe after timing has started.
+        {t('Every class gets numbers that follow each other. Laps stay with the runner, so this is safe after timing has started.')}
       </div>
 
       <label className="stack" style={{ gap: 4 }}>
-        <span className="muted tiny">Bib numbers you have. Paste a list, e.g. 1-60, 100-150 (commas, spaces or line breaks)</span>
+        <span className="muted tiny">{t('Bib numbers you have. Paste a list, e.g. 1-60, 100-150 (commas, spaces or line breaks)')}</span>
         {/* A textarea: a single-line input drops pasted line breaks and glues
             "306-310" and "322-329" into one number. */}
         <textarea rows={Math.min(8, Math.max(2, numbers.split('\n').length))} value={numbers}
           onChange={(e) => setNumbers(e.target.value)} style={{ resize: 'vertical', fontFamily: 'inherit' }} />
         {!parsed.error && parsed.numbers.length > 0 && (
-          <span className="muted tiny">{parsed.numbers.length} numbers · {parsed.numbers[0]}–{parsed.numbers[parsed.numbers.length - 1]}</span>
+          <span className="muted tiny">{plural(parsed.numbers.length, 'number')} · {parsed.numbers[0]}–{parsed.numbers[parsed.numbers.length - 1]}</span>
         )}
       </label>
       {parsed.error && <div className="form-error">{parsed.error}</div>}
@@ -71,27 +72,27 @@ export default function BibAssign({ eventId, runners, onApply, onClose }) {
           <div key={g.category} style={{ display: 'grid', gridTemplateColumns: `${classes.length > 1 ? 'auto ' : ''}minmax(0, 1fr) 64px`, gap: 8, alignItems: 'center' }}>
             {classes.length > 1 && (
               <span className="row" style={{ gap: 2 }}>
-                <button className="btn ghost sm" disabled={i === 0} onClick={() => move(i, -1)} aria-label={`Move ${g.category || 'no class'} earlier`}>▲</button>
-                <button className="btn ghost sm" disabled={i === classes.length - 1} onClick={() => move(i, 1)} aria-label={`Move ${g.category || 'no class'} later`}>▼</button>
+                <button className="btn ghost sm" disabled={i === 0} onClick={() => move(i, -1)} aria-label={t('Move {name} earlier', { name: g.category || t('no class') })}>▲</button>
+                <button className="btn ghost sm" disabled={i === classes.length - 1} onClick={() => move(i, 1)} aria-label={t('Move {name} later', { name: g.category || t('no class') })}>▼</button>
               </span>
             )}
             <span style={{ minWidth: 0 }}>
-              <strong>{g.category || 'No class'}</strong>
+              <strong>{g.category || t('No class')}</strong>
               <span className="muted"> · {g.items.length} → </span>
-              <span>{g.first == null ? 'no numbers left' : g.first === g.last ? `${g.first}` : `${g.first}–${g.last}`}{g.gaps ? ' (with gaps)' : ''}</span>
+              <span>{g.first == null ? t('no numbers left') : g.first === g.last ? `${g.first}` : `${g.first}–${g.last}`}{g.gaps ? ` (${t('with gaps')})` : ''}</span>
             </span>
-            <input style={{ width: '100%' }} inputMode="numeric" placeholder="from"
-              value={starts[g.category] ?? ''} aria-label={`First bib for ${g.category || 'no class'}`}
+            <input style={{ width: '100%' }} inputMode="numeric" placeholder={t('from')}
+              value={starts[g.category] ?? ''} aria-label={t('First bib for {name}', { name: g.category || t('no class') })}
               onChange={(e) => setStarts({ ...starts, [g.category]: e.target.value.replace(/\D/g, '') })} />
           </div>
         ))}
       </div>
 
       {plan.missing > 0 && (
-        <div className="form-error">Not enough numbers: {plan.missing} runner{plan.missing === 1 ? '' : 's'} would get none. Add more numbers or lower a start.</div>
+        <div className="form-error">{t('Not enough numbers: {n} would get none. Add more numbers or lower a start.', { n: plural(plan.missing, 'runner') })}</div>
       )}
       <button className="btn primary block" disabled={blocked} onClick={apply}>
-        {plan.changes.length ? `Apply · ${plan.changes.length} bib${plan.changes.length === 1 ? '' : 's'} change` : 'Bibs already match'}
+        {plan.changes.length ? t('Apply · {n} change', { n: plural(plan.changes.length, 'bib') }) : t('Bibs already match')}
       </button>
     </div>
   )

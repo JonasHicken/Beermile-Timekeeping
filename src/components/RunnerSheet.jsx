@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js'
 import { formatOf } from '../lib/eventFormat.js'
 import { useEffect, useState } from 'react'
 import {
@@ -34,7 +35,7 @@ export default function RunnerSheet({ eventId, heatId, runnerId, onClose, offerU
   return (
     <>
       <div className="sheet-backdrop" onClick={onClose} />
-      <div className="sheet" role="dialog" aria-label={`Runner ${runner.bib}`}>
+      <div className="sheet" role="dialog" aria-label={`${t('Runner')} ${runner.bib}`}>
         <div className="sheet-grip" />
 
         <div className="row" style={{ alignItems: 'flex-start' }}>
@@ -43,16 +44,16 @@ export default function RunnerSheet({ eventId, heatId, runnerId, onClose, offerU
               <span style={{ color: 'var(--amber)' }}>{runner.bib}</span> {runner.name}
             </div>
             <div className="muted tiny" style={{ textTransform: 'uppercase', letterSpacing: '.08em' }}>
-              {heat.name} · {result.lapsDone}/{result.requiredLaps} laps
+              {heat.name} · {result.lapsDone}/{result.requiredLaps} {t('laps')}
               {result.finished && ` · ${fmt(result.elapsed)}`}
             </div>
           </div>
-          <button className="btn ghost" onClick={onClose} aria-label="Close">✕</button>
+          <button className="btn ghost" onClick={onClose} aria-label={t('Close')}>✕</button>
         </div>
 
         {/* status */}
         <div style={{ marginTop: 18 }}>
-          <span className="label">Status</span>
+          <span className="label">{t('Status')}</span>
           <div className="seg">
             {STATUSES.map((s) => (
               <button
@@ -60,7 +61,7 @@ export default function RunnerSheet({ eventId, heatId, runnerId, onClose, offerU
                 className={`seg-btn${status === s.key ? ' on' : ''}`}
                 onClick={() => setRunnerStatus(runner.id, s.key)}
               >
-                {s.label}
+                {t(s.label)}
               </button>
             ))}
           </div>
@@ -68,13 +69,13 @@ export default function RunnerSheet({ eventId, heatId, runnerId, onClose, offerU
 
         {/* penalty laps: a beer mile's, not a track race's */}
         {formatOf(event).penalties && <div style={{ marginTop: 16 }}>
-          <span className="label">Penalty laps</span>
+          <span className="label">{t('Penalty laps')}</span>
           <div className="row">
             <button className="btn" onClick={() => setPenaltyLaps(runner.id, penalty - 1)} disabled={penalty === 0}>−</button>
             <div className="grow center">
               <div className="display" style={{ fontSize: 26 }}>{penalty}</div>
               <div className="muted tiny">
-                {penalty === 0 ? 'None' : `Must run ${result.requiredLaps} laps total`}
+                {penalty === 0 ? t('None') : t('Must run {n} laps total', { n: result.requiredLaps })}
               </div>
             </div>
             <button className="btn" onClick={() => setPenaltyLaps(runner.id, penalty + 1)}>+</button>
@@ -83,25 +84,25 @@ export default function RunnerSheet({ eventId, heatId, runnerId, onClose, offerU
 
         {/* laps */}
         <div style={{ marginTop: 18 }}>
-          <span className="label">Laps</span>
-          {result.laps.length === 0 && <div className="muted tiny">No crossings recorded yet.</div>}
+          <span className="label">{t('Laps')}</span>
+          {result.laps.length === 0 && <div className="muted tiny">{t('No crossings recorded yet.')}</div>}
           <div className="list">
             {result.laps.map((l) => (
               <div className="item" key={l.id}>
                 <span className="bib">L{l.lap}</span>
                 <span className="grow">
                   <strong>{fmtShort(l.split)}</strong>
-                  <span className="muted tiny"> split · {fmt(l.at - heat.startedAt)} elapsed</span>
+                  <span className="muted tiny"> {t('split')} · {fmt(l.at - heat.startedAt)} {t('elapsed')}</span>
                 </span>
                 <button
                   className="btn ghost danger"
                   onClick={() => {
                     setCrossingVoid(l.id, true)
-                    offerUndo?.(`Removed lap ${l.lap} for ${runner.bib}`, () => setCrossingVoid(l.id, false))
+                    offerUndo?.(t('Removed lap {lap} for {bib}', { lap: l.lap, bib: runner.bib }), () => setCrossingVoid(l.id, false))
                   }}
-                  aria-label={`Remove lap ${l.lap}`}
+                  aria-label={t('Remove lap {lap}', { lap: l.lap })}
                 >
-                  Remove
+                  {t('Remove')}
                 </button>
               </div>
             ))}
@@ -116,7 +117,7 @@ export default function RunnerSheet({ eventId, heatId, runnerId, onClose, offerU
                   className="btn block"
                   onClick={() => recordCrossing(heatId, runner.id, 'manual', undefined, { force: true })}
                 >
-                  + Add lap now
+                  {t('+ Add lap now')}
                 </button>
               )}
               {addingAt ? (
@@ -133,7 +134,7 @@ export default function RunnerSheet({ eventId, heatId, runnerId, onClose, offerU
                 </div>
               ) : (
                 <button className="btn ghost block" onClick={() => setAddingAt(true)}>
-                  + Add a missed lap at a time…
+                  {t('+ Add a missed lap at a time…')}
                 </button>
               )}
             </div>

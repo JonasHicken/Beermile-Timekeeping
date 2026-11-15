@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js'
 import { useEffect, useState } from 'react'
 import { useStore, pendingCount } from '../lib/store.js'
 import { useSyncStatus } from '../lib/online.js'
@@ -14,15 +15,15 @@ export default function SyncBadge({ eventId }) {
   }, [])
 
   let kind = 'wait'
-  let text = 'Connecting…'
-  if (st?.denied) { kind = 'bad'; text = 'Link no longer valid' }
-  else if (st?.needName) { kind = 'bad'; text = waiting ? `Name needed · ${waiting} waiting` : 'Name needed' }
+  let text = t('Connecting…')
+  if (st?.denied) { kind = 'bad'; text = t('Link no longer valid') }
+  else if (st?.needName) { kind = 'bad'; text = waiting ? t('Name needed · {n} waiting', { n: waiting }) : t('Name needed') }
   else if (st?.ok && Date.now() - st.at < 10000) {
     kind = waiting ? 'wait' : 'ok'
-    text = waiting ? `Sending ${waiting}…` : 'Live'
+    text = waiting ? t('Sending {n}…', { n: waiting }) : t('Live')
   } else if (st && !st.ok) {
     kind = 'bad'
-    text = waiting ? `Offline · ${waiting} waiting` : 'Offline'
+    text = waiting ? t('Offline · {n} waiting', { n: waiting }) : t('Offline')
   }
   return (
     <span className={`sync-badge ${kind}`} role="status" aria-live="polite">

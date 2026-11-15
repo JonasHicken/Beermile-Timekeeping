@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js'
 import { useEffect, useState } from 'react'
 
 const UNDO_MS = 12000
@@ -28,15 +29,15 @@ export function useUndo() {
     <div className="snackbar" role="status" key={top.key}>
       <span className="grow">
         {top.message}
-        {stack.length > 1 && <span className="muted"> · {stack.length - 1} more to undo</span>}
+        {stack.length > 1 && <span className="muted"> · {t('{n} more to undo', { n: stack.length - 1 })}</span>}
       </span>
       <button
         className="btn sm primary"
         onClick={() => { top.undo(); setStack((s) => s.slice(0, -1)) }}
       >
-        Undo
+        {t('Undo')}
       </button>
-      <button className="snack-x" onClick={() => setStack([])} aria-label="Dismiss">✕</button>
+      <button className="snack-x" onClick={() => setStack([])} aria-label={t('Dismiss')}>✕</button>
     </div>
   ) : null
 

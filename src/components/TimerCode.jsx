@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js'
 import { useState } from 'react'
 import { joinWithLink, isNameError, isAccessError } from '../lib/online.js'
 
@@ -9,7 +10,7 @@ import { joinWithLink, isNameError, isAccessError } from '../lib/online.js'
 export default function TimerCode({ eventId, token, hint = 'trenger_navn', onIn }) {
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState(hint === 'feil_navn' ? 'Your name is no longer on the list of timers. Ask the admin.' : null)
+  const [error, setError] = useState(hint === 'feil_navn' ? t('Your name is no longer on the list of timers. Ask the admin.') : null)
   const [none, setNone] = useState(hint === 'ingen_tidtakere')
 
   async function submit(e) {
@@ -23,24 +24,24 @@ export default function TimerCode({ eventId, token, hint = 'trenger_navn', onIn 
     } catch (err) {
       const h = isNameError(err)
       if (h === 'ingen_tidtakere') { setNone(true); setError(null) }
-      else if (h) setError('That name is not on the list of timers. Check the spelling with the admin.')
-      else if (isAccessError(err)) setError('This timing link is no longer valid. Ask the admin for the new one.')
-      else setError('Could not reach the server. Check your signal and try again.')
+      else if (h) setError(t('That name is not on the list of timers. Check the spelling with the admin.'))
+      else if (isAccessError(err)) setError(t('This timing link is no longer valid. Ask the admin for the new one.'))
+      else setError(t('Could not reach the server. Check your signal and try again.'))
     } finally { setBusy(false) }
   }
 
   return (
     <form className="card stack" style={{ gap: 10 }} onSubmit={submit}>
-      <strong>Type your name to start timing</strong>
+      <strong>{t('Type your name to start timing')}</strong>
       <div className="muted tiny">
         {none
-          ? 'The admin has not added any timers yet. Try again once they have.'
-          : 'Your name is your code: write it the way the admin added you.'}
+          ? t('The admin has not added any timers yet. Try again once they have.')
+          : t('Your name is your code: write it the way the admin added you.')}
       </div>
-      <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" aria-label="Your name"
+      <input value={name} onChange={(e) => setName(e.target.value)} placeholder={t('Your name')} aria-label={t('Your name')}
         autoComplete="off" autoCapitalize="words" maxLength={30} />
       {error && <div className="form-error">{error}</div>}
-      <button className="btn primary" type="submit" disabled={busy || !name.trim()}>{busy ? 'Checking…' : 'Start timing'}</button>
+      <button className="btn primary" type="submit" disabled={busy || !name.trim()}>{busy ? t('Checking…') : t('Start timing')}</button>
     </form>
   )
 }

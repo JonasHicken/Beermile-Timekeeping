@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { t, getLang } from '../lib/i18n.js'
 
 const KEY = 'bmtk:help-open'
 
@@ -17,10 +18,15 @@ export default function HelpBox() {
   return (
     <div className="card help-box" style={{ marginTop: 16 }}>
       <button className="help-head" onClick={toggle} aria-expanded={open}>
-        <span className="grow">New here? How the app works</span>
+        <span className="grow">{t('New here? How the app works')}</span>
         <span aria-hidden>{open ? '–' : '+'}</span>
       </button>
-      {open && (
+      {open && (getLang() === 'no' ? NO : EN)}
+    </div>
+  )
+}
+
+const EN = (
         <div className="stack help-body" style={{ gap: 14 }}>
           <section>
             <h3>Time a race in four steps</h3>
@@ -59,7 +65,45 @@ export default function HelpBox() {
             </p>
           </section>
         </div>
-      )}
-    </div>
-  )
-}
+)
+
+const NO = (
+        <div className="stack help-body" style={{ gap: 14 }}>
+          <section>
+            <h3>Ta tiden på et løp i fire steg</h3>
+            <ol>
+              <li><b>Nytt løp:</b> velg distanse (400 m til 5000 m, Beermile eller Egendefinert). Tidspunktene fylles inn for deg; endre dem hvis løypa di er annerledes.</li>
+              <li><b>Startliste:</b> legg inn løpere for hånd, eller importer et regneark (.xlsx eller .csv) eller innlimte rader. Gi alle et startnummer.</li>
+              <li><b>Heat:</b> del løperne inn i heat som starter sammen.</li>
+              <li><b>Løpsdagen:</b> åpne et heat, trykk <b>Start</b>, og trykk på løperens rute hver gang de passerer et tidspunkt. Resultater og mellomtider fylles inn av seg selv.</li>
+            </ol>
+            <p className="muted tiny">Alt lagres på denne telefonen underveis, og tidtakingen virker uten dekning.</p>
+          </section>
+
+          <section>
+            <h3>Flere telefoner: et delt løp</h3>
+            <p>
+              Alene tar appen tiden på én telefon. Logg inn som arrangør (under: du får en lenke på e-post, uten passord) og
+              kryss av for <b>Delt løp</b> når du lager løpet. Du får en admin-lenke til deg selv og en tidtakerlenke å sende til hjelperne:
+            </p>
+            <ul>
+              <li>flere tidtakere på samme løp, hver med sine egne løpere;</li>
+              <li>alt sikkerhetskopieres på serveren, så en mistet telefon mister ingenting som er sendt;</li>
+              <li>du starter heatene, tidtakerne bare trykker; endringer når alle telefonene på sekunder.</li>
+            </ul>
+            <p className="muted tiny">
+              Delte løp lagres i en gratis Supabase-database og slettes tre måneder etter løpet. Kjører du din egen kopi av
+              appen? Koble til ditt eget Supabase-prosjekt: steg for steg i README, under «Connecting a database».
+            </p>
+          </section>
+
+          <section>
+            <h3>Live-resultater på en nettside</h3>
+            <p>
+              Et delt løp kan vise resultatene live mens det pågår. I <b>Race admin › Oppsett</b>, slå på <b>Resultater på
+              løpssiden</b>. En nettside som er koblet til løpet (som en klubbs løpsside), viser dem da etter hvert som de kommer inn. Slå det av for å holde
+              resultatene på tidtakertelefonene.
+            </p>
+          </section>
+        </div>
+)

@@ -1,3 +1,4 @@
+import { t } from './i18n.js'
 // Sending a race's results to a website's records list.
 //
 // A race linked to a website (it set `eksport` on the race through the admin
@@ -26,7 +27,7 @@ async function client(eksport) {
 // rows: recordRows(...) -> { sendt, oppdatert, godkjent } (godkjent: rows the
 // site has approved already, so left as they were).
 export async function sendToRecords(eksport, rows) {
-  if (!eksport?.url || !eksport?.key) throw new Error('This race is not linked to a website.')
+  if (!eksport?.url || !eksport?.key) throw new Error(t('This race is not linked to a website.'))
   const sb = await client(eksport)
   const { data, error } = await sb.rpc('privat_lop_motta_resultater', {
     p_kode: eksport.kode, p_nokkel: eksport.nokkel, p_rader: rows,

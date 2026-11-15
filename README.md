@@ -74,6 +74,12 @@ signal.
 `source:'rfid'` into the exact same shape, and every screen already
 understands them.
 
+**Two languages.** The app opens in Norwegian, with a switch to English on
+the home page (kept per phone). Every text is written in English and passed
+through `t()`; `src/lib/i18n/no.js` holds the Norwegian, and a test fails if a
+text has no Norwegian entry. To add a text, write `t('…')` and add its line to
+`no.js`.
+
 **Corrections never delete.** A mis-tap is voided, not removed, so the log
 stays auditable and can be reconciled against chip data. Lap numbers are
 re-derived from chronological order when read, so voiding one lap renumbers the
@@ -238,6 +244,7 @@ has switched them on.
 | `src/lib/organiser.js` | Organiser login, creating shared races, my races |
 | `src/lib/eventFormat.js` | Event types (400 m to 5000 m, Beermile, Custom) and timing points |
 | `src/lib/recordsExport.js` | Sending results to a linked website's records list |
+| `src/lib/i18n.js`, `src/lib/i18n/no.js` | Norwegian (default) and English: `t('English text')`, with the Norwegian in `no.js` |
 | `src/pages/Home.jsx` | Event list / create |
 | `src/pages/Setup.jsx` | Start list + heats |
 | `src/pages/Timing.jsx` | The tap-timing tile grid (the heart) |

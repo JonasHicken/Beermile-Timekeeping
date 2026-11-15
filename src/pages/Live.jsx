@@ -1,3 +1,4 @@
+import { t, plural } from '../lib/i18n.js'
 import { formatOf, describe, progressLabel } from '../lib/eventFormat.js'
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
@@ -6,7 +7,7 @@ import { fmt, fmtShort } from '../lib/time.js'
 import { useOnlineSync } from '../lib/online.js'
 
 // The ways out of a race, in the order the results list them.
-const OUT = [['dnf', 'Did not finish'], ['dns', 'Did not start'], ['dq', 'Disqualified']]
+const OUT = [['dnf', 'Did not finish'], ['dns', 'Did not start'], ['dq', 'Disqualified']] // labels go through t()
 
 export default function Live() {
   const { eventId } = useParams()
@@ -22,8 +23,8 @@ export default function Live() {
   if (!event) {
     return (
       <div className="app">
-        <Link to="/" className="backlink">← Home</Link>
-        <div className="empty">Event not found.</div>
+        <Link to="/" className="backlink">{t('← Home')}</Link>
+        <div className="empty">{t('Event not found.')}</div>
       </div>
     )
   }
@@ -87,20 +88,20 @@ export default function Live() {
   return (
     <div className="app">
       <div className="topbar">
-        <Link to={`/event/${eventId}/setup`} className="backlink">← Setup</Link>
+        <Link to={`/event/${eventId}/setup`} className="backlink">{t('← Setup')}</Link>
         <div className="spacer" />
-        {anyRunning ? <span className="pill live">● Live</span> : <span className="pill done">Results</span>}
+        {anyRunning ? <span className="pill live">{t('● Live')}</span> : <span className="pill done">{t('Results')}</span>}
       </div>
 
       <h1 style={{ margin: 0, fontSize: 28 }}>{event.name}</h1>
       <div className="muted tiny" style={{ textTransform: 'uppercase', letterSpacing: '.08em', marginTop: 6, marginBottom: 16 }}>
-        {event.date} · {describe(formatOf(event))} · {shownFinishers.length} finished
+        {event.date} · {describe(formatOf(event))} · {t('{n} finished', { n: shownFinishers.length })}
       </div>
 
       {heats.length > 1 && (
         <div className="chips">
           <button className={`chip${heatFilter === 'all' ? ' on' : ''}`} onClick={() => setHeatFilter('all')}>
-            All heats
+            {t('All heats')}
           </button>
           {heats.map((h) => (
             <button
@@ -117,7 +118,7 @@ export default function Live() {
       {classes.length > 1 && (
         <div className="chips">
           <button className={`chip${classFilter === 'all' ? ' on' : ''}`} onClick={() => setClassFilter('all')}>
-            All classes
+            {t('All classes')}
           </button>
           {classes.map((c) => (
             <button key={c} className={`chip${classFilter === c ? ' on' : ''}`} onClick={() => setClassFilter(c)}>
@@ -129,8 +130,8 @@ export default function Live() {
 
       {shownFinishers.length === 0 && shownProgress.length === 0 && shownDnf.length === 0 && (
         <div className="empty">
-          <div className="display">No times yet</div>
-          Start a heat and standings appear here live.
+          <div className="display">{t('No times yet')}</div>
+          {t('Start a heat and standings appear here live.')}
         </div>
       )}
 
@@ -139,8 +140,8 @@ export default function Live() {
           <thead>
             <tr>
               <th></th>
-              <th>Runner</th>
-              <th style={{ textAlign: 'right' }}>Time</th>
+              <th>{t('Runner')}</th>
+              <th style={{ textAlign: 'right' }}>{t('Time')}</th>
             </tr>
           </thead>
           <tbody>
@@ -152,7 +153,7 @@ export default function Live() {
                     <strong>{r.runner.bib}</strong> {r.runner.name}
                     {r.runner.club && <span className="r-club"> {r.runner.club}</span>}
                     {r.runner.penaltyLaps > 0 && (
-                      <span className="r-pen">+{r.runner.penaltyLaps} penalty lap{r.runner.penaltyLaps > 1 ? 's' : ''}</span>
+                      <span className="r-pen">+{plural(r.runner.penaltyLaps, 'penalty lap')}</span>
                     )}
                   </div>
                   <div className="splits">
@@ -169,7 +170,7 @@ export default function Live() {
 
       {shownProgress.length > 0 && (
         <>
-          <h2 className="sec-head">On course</h2>
+          <h2 className="sec-head">{t('On course')}</h2>
           <div className="list">
             {shownProgress.map((r) => (
               <div className="item" key={r.runner.id}>
@@ -189,7 +190,7 @@ export default function Live() {
         if (!list.length) return null
         return (
           <div key={status}>
-            <h2 className="sec-head">{title}</h2>
+            <h2 className="sec-head">{t(title)}</h2>
             <div className="list">
               {list.map((r) => (
                 <div className="item" key={r.runner.id}>
@@ -205,13 +206,13 @@ export default function Live() {
 
       {(shownFinishers.length > 0 || shownDnf.length > 0) && (
         <button className="btn block" style={{ marginTop: 22 }} onClick={exportCsv}>
-          {copied ? '✓ Copied + downloaded' : 'Export CSV'}
+          {copied ? t('✓ Copied + downloaded') : t('Export CSV')}
         </button>
       )}
 
       {notStarted.length > 0 && heatFilter === 'all' && (
         <div className="muted tiny" style={{ marginTop: 18 }}>
-          {notStarted.length} not yet started.
+          {t('{n} not yet started.', { n: notStarted.length })}
         </div>
       )}
 

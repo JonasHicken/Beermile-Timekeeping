@@ -1,3 +1,4 @@
+import { t } from './i18n.js'
 // ---------------------------------------------------------------------------
 // Local-first data store for Beermile Timekeeping.
 //
@@ -697,14 +698,14 @@ export function addLapAt(heatId, runnerId, at) {
   const heat = getHeat(state, heatId)
   const event = getEvent(state, heat?.eventId)
   const runner = getRunner(state, runnerId)
-  if (!heat || heat.startedAt == null) return { error: 'The heat has not started.' }
-  if (at < heat.startedAt) return { error: 'That is before the start.' }
+  if (!heat || heat.startedAt == null) return { error: t('The heat has not started.') }
+  if (at < heat.startedAt) return { error: t('That is before the start.') }
   const kept = crossingsForRunner(state, heatId, runnerId)
   if (event && kept.length >= requiredLaps(event, runner)) {
-    return { error: 'All laps are already recorded. Remove the wrong one first.' }
+    return { error: t('All laps are already recorded. Remove the wrong one first.') }
   }
   if (kept.some((c) => Math.abs(c.capturedAt - at) < DUPLICATE_MS)) {
-    return { error: 'There is already a lap within 15 seconds of that time.' }
+    return { error: t('There is already a lap within 15 seconds of that time.') }
   }
   const c = {
     id: uid(), eventId: event?.id ?? null, heatId, runnerId, bib: runner?.bib ?? null,

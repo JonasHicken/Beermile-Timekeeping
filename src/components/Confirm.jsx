@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js'
 import { useState, useEffect } from 'react'
 
 // In-app confirmation, replacing window.confirm().
@@ -29,7 +30,7 @@ export function ConfirmDialog({
         <div className="display" style={{ fontSize: 23 }}>{title}</div>
         {body && <p className="muted" style={{ margin: '10px 0 0' }}>{body}</p>}
         <div className="row" style={{ marginTop: 22 }}>
-          <button className="btn ghost grow" onClick={onClose}>Cancel</button>
+          <button className="btn ghost grow" onClick={onClose}>{t('Cancel')}</button>
           <button
             className={`btn grow ${danger ? 'danger-solid' : 'primary'}`}
             onClick={() => { onConfirm?.(); onClose() }}

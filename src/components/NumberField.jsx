@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js'
 import { useState } from 'react'
 
 // 1st, 2nd, 3rd, 4th … 11th, 12th, 13th … 21st
@@ -23,7 +24,7 @@ export default function NumberField({ value, min, max, onCommit, label }) {
     setDraft(null)
     if (!Number.isFinite(n)) { setNote(null); return }
     const clamped = Math.min(max, Math.max(min, n))
-    setNote(clamped !== n ? { for: clamped, text: `${label}: ${min}–${max}, so ${clamped}.` } : null)
+    setNote(clamped !== n ? { for: clamped, text: t('{label}: {min}–{max}, so {n}.', { label, min, max, n: clamped }) } : null)
     onCommit(clamped)
   }
 

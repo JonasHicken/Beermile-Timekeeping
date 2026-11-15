@@ -1,7 +1,7 @@
+import { t, plural } from '../lib/i18n.js'
 import { useState } from 'react'
 import { planTimers } from '../lib/heats.js'
 
-const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
 // Giving the runners to timers in one go: pick which timers take part and the
 // most runners one timer can watch, and every heat that has not started is
@@ -40,21 +40,21 @@ export default function TimerAutoAssign({ eventId, timers, heats, busy, onApply 
   if (!heats.length) return null
   return (
     <div className="card stack" style={{ gap: 10, marginTop: 10 }}>
-      <strong>Give runners to timers automatically</strong>
-      <div className="muted tiny">Tap the timers who take part. Each heat that has not started is shared between them.</div>
+      <strong>{t('Give runners to timers automatically')}</strong>
+      <div className="muted tiny">{t('Tap the timers who take part. Each heat that has not started is shared between them.')}</div>
       <div className="row wrap" style={{ gap: 6 }}>
         {timers.map((t) => (
           <button key={t} type="button" className={`chip${off.has(t) ? '' : ' on'}`} aria-pressed={!off.has(t)} onClick={() => toggle(t)}>{t}</button>
         ))}
       </div>
       <label className="row" style={{ gap: 8 }}>
-        Max runners per timer
+        {t('Max runners per timer')}
         <input type="number" min="1" max="40" inputMode="numeric" value={max} style={{ width: 70 }}
           onChange={(e) => { setMax(e.target.value); remember({ max: e.target.value }) }} />
       </label>
 
       {chosen.length === 0 ? (
-        <div className="form-error">Choose at least one timer.</div>
+        <div className="form-error">{t('Choose at least one timer.')}</div>
       ) : (
         <div className="stack" style={{ gap: 4 }}>
           {plan.map((p, i) => {
@@ -63,8 +63,8 @@ export default function TimerAutoAssign({ eventId, timers, heats, busy, onApply 
               <div key={p.id} className="row" style={{ gap: 8, alignItems: 'baseline' }}>
                 <strong style={{ minWidth: 64 }}>{heats[i].name}</strong>
                 <span className="muted grow">
-                  {counts.map(([t, n]) => `${t} ${n}`).join(' · ') || 'no runners'}
-                  {p.left > 0 && <span style={{ color: 'var(--red)' }}> · {p.left} without a timer</span>}
+                  {counts.map(([nm, n]) => `${nm} ${n}`).join(' · ') || t('no runners')}
+                  {p.left > 0 && <span style={{ color: 'var(--red)' }}> · {t('{n} without a timer', { n: p.left })}</span>}
                 </span>
               </div>
             )
@@ -73,13 +73,13 @@ export default function TimerAutoAssign({ eventId, timers, heats, busy, onApply 
       )}
       {left > 0 && (
         <div className="muted tiny" style={{ color: 'var(--red)' }}>
-          {plural(left, 'runner')} would have no timer, so only you could time them. Choose more timers or raise the max.
+          {t('{n} would have no timer, so only you could time them. Choose more timers or raise the max.', { n: plural(left, 'runner') })}
         </div>
       )}
       <button className="btn primary" disabled={busy || chosen.length === 0} onClick={apply}>
-        Assign to {plural(heats.length, 'heat')}
+        {t('Assign to {n}', { n: plural(heats.length, 'heat') })}
       </button>
-      <div className="muted tiny">Heats that have started keep their timers. You can still change one runner’s timer in the start list.</div>
+      <div className="muted tiny">{t('Heats that have started keep their timers. You can still change one runner’s timer in the start list.')}</div>
     </div>
   )
 }

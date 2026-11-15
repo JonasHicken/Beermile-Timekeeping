@@ -1,3 +1,4 @@
+import { t, plural as tPlural, ordinal as tOrdinal } from './i18n.js'
 // What kind of race is timed, and where on the course a runner is timed.
 //
 // A race is a list of timing points: the distance (in metres from the start)
@@ -68,19 +69,19 @@ export const isBeermile = (format) => format.kind === 'beermile'
 // otherwise; past the race's points, a penalty lap.
 export function splitLabel(format, i) {
   const n = format.points.length
-  if (i >= n) return `Penalty lap ${i - n + 1}`
-  if (isBeermile(format)) return `Lap ${i + 1}`
+  if (i >= n) return `${t('Penalty lap')} ${i - n + 1}`
+  if (isBeermile(format)) return `${t('Lap')} ${i + 1}`
   return `${format.points[i]} m`
 }
 
-const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
+const plural = tPlural
 
 // One line for a list or a heading: "Beermile · 4 laps", "1500 m · 4 splits".
 export function describe(format) {
   const n = format.points.length
   const name = KINDS.find((k) => k.id === format.kind && k.id !== 'custom')?.label ?? `${format.distance} m`
   if (isBeermile(format)) return `Beermile · ${plural(n, 'lap')}`
-  if (n === 1) return `${name} · finish only`
+  if (n === 1) return `${name} · ${t('finish only')}`
   return `${name} · ${plural(n, 'split')}`
 }
 
@@ -88,10 +89,10 @@ export function describe(format) {
 export function parsePoints(text) {
   const parts = String(text).split(/[\s,;]+/).filter(Boolean)
   const points = parts.map((p) => Number(p.replace(/m$/i, '')))
-  if (!points.length) return { error: 'Write at least the finish distance.' }
-  if (points.some((p) => !Number.isInteger(p) || p < 1 || p > 100000)) return { error: 'Distances are whole metres, like 300, 700, 1500.' }
-  if (points.some((p, i) => i > 0 && p <= points[i - 1])) return { error: 'Each point must be further than the one before.' }
-  if (points.length > MAX_POINTS) return { error: `At most ${MAX_POINTS} timing points.` }
+  if (!points.length) return { error: t('Write at least the finish distance.') }
+  if (points.some((p) => !Number.isInteger(p) || p < 1 || p > 100000)) return { error: t('Distances are whole metres, like 300, 700, 1500.') }
+  if (points.some((p, i) => i > 0 && p <= points[i - 1])) return { error: t('Each point must be further than the one before.') }
+  if (points.length > MAX_POINTS) return { error: t('At most {n} timing points.', { n: MAX_POINTS }) }
   return { points }
 }
 
@@ -113,26 +114,23 @@ export function normalise(format) {
 
 export const sameFormat = (a, b) => JSON.stringify(normalise(a)) === JSON.stringify(normalise(b))
 
-// 1st, 2nd, 3rd, 4th … 11th, 12th, 13th … 21st
-const ordinal = (n) => {
-  const s = ['th', 'st', 'nd', 'rd']
-  const v = n % 100
-  return n + (s[(v - 20) % 10] || s[v] || s[0])
-}
+const ordinal = tOrdinal
 
 // What a change in the number of timing points does to results already timed.
 export function formatChangeWarning(was, now, finished) {
-  return 'Laps are already recorded. Every result is worked out from the timing points, so ' +
+  const vars = { taps: plural(was, 'tap'), nth: ordinal(now), n: plural(finished, 'runner') }
+  return t('Laps are already recorded. Every result is worked out from the timing points, so') + ' ' +
     (now > was
-      ? `runners who finished after ${plural(was, 'tap')} count as still on course until a ${ordinal(now)} is recorded` +
-        (finished ? ` (${plural(finished, 'runner')} finished right now).` : '.')
-      : `runners finish at their ${ordinal(now)} tap, and later taps no longer count.`) +
-    ' You can undo it straight after.'
+      ? t(finished
+        ? 'runners who finished after {taps} count as still on course until a {nth} is recorded ({n} finished right now).'
+        : 'runners who finished after {taps} count as still on course until a {nth} is recorded.', vars)
+      : t('runners finish at their {nth} tap, and later taps no longer count.', vars)) +
+    ' ' + t('You can undo it straight after.')
 }
 
 // Where a runner on course is: "lap 2/4" in a beer mile, "700 m / 1500" else.
 export function progressLabel(format, row) {
-  if (isBeermile(format) || !row.lapsDone) return `lap ${row.lapsDone}/${row.requiredLaps}`
+  if (isBeermile(format) || !row.lapsDone) return `${t('lap')} ${row.lapsDone}/${row.requiredLaps}`
   const at = format.points[Math.min(row.lapsDone, format.points.length) - 1]
   return `${at} m / ${format.distance}`
 }

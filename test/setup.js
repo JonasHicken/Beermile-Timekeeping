@@ -7,6 +7,10 @@ Object.defineProperty(globalThis, 'localStorage', {
     getItem: (k) => (mem.has(k) ? mem.get(k) : null),
     setItem: (k, v) => { mem.set(k, String(v)) },
     removeItem: (k) => { mem.delete(k) },
-    clear: () => mem.clear(),
+    // Clearing keeps the language: the tests read the English texts
+    // (i18n.test.js checks the Norwegian ones).
+    clear: () => { mem.clear(); mem.set('bmtk:lang', 'en') },
   },
 })
+
+mem.set('bmtk:lang', 'en')

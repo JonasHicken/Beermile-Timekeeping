@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js'
 import { useEffect, useState } from 'react'
 import { KINDS, presetFormat, normalise, parsePoints, describe, isBeermile, sameFormat } from '../lib/eventFormat.js'
 
@@ -40,18 +41,18 @@ export default function EventFormatEditor({ value, onSave, busy, compact = false
 
   return (
     <div className="stack" style={{ gap: 10 }}>
-      <div className="chips" style={{ flexWrap: 'wrap' }} role="radiogroup" aria-label="Event">
+      <div className="chips" style={{ flexWrap: 'wrap' }} role="radiogroup" aria-label={t('Event')}>
         {KINDS.map((k) => (
           <button key={k.id} type="button" role="radio" aria-checked={draft.kind === k.id}
             className={`chip${draft.kind === k.id ? ' on' : ''}`} disabled={busy} onClick={() => pick(k.id)}>
-            {k.label}
+            {t(k.label)}
           </button>
         ))}
       </div>
 
       {beermile ? (
         <label className="row" style={{ gap: 10 }}>
-          <span className="grow">Laps of {draft.lapLength} m</span>
+          <span className="grow">{t('Laps of {m} m', { m: draft.lapLength })}</span>
           <input type="number" inputMode="numeric" min="1" max="40" style={{ width: 80 }} disabled={busy}
             value={draft.points.length}
             onChange={(e) => change({ ...draft, mode: 'laps', distance: Math.max(1, Number(e.target.value) || 1) * draft.lapLength })} />
@@ -71,9 +72,9 @@ export default function EventFormatEditor({ value, onSave, busy, compact = false
             </label>
           </div>
           <div className="stack" style={{ gap: 4 }}>
-            <span className="label">Timed</span>
-            <div className="chips" style={{ flexWrap: 'wrap' }} role="radiogroup" aria-label="Timed">
-              {[['laps', 'Every lap'], ['finish', 'Finish only'], ['points', 'My own points']].map(([m, label]) => (
+            <span className="label">{t('Timed')}</span>
+            <div className="chips" style={{ flexWrap: 'wrap' }} role="radiogroup" aria-label={t('Timed')}>
+              {[['laps', t('Every lap')], ['finish', t('Finish only')], ['points', t('My own points')]].map(([m, label]) => (
                 <button key={m} type="button" role="radio" aria-checked={draft.mode === m}
                   className={`chip${draft.mode === m ? ' on' : ''}`} disabled={busy}
                   onClick={() => change({ ...draft, mode: m, points: m === 'points' ? draft.points : undefined })}>
@@ -92,14 +93,14 @@ export default function EventFormatEditor({ value, onSave, busy, compact = false
 
       {error ? <div className="form-error">{error}</div> : (
         <div className="muted tiny">
-          {describe(draft)}{beermile ? '. Penalty laps can be added per runner while timing.' : `: a tap at ${draft.points.join(', ')} m.`}
+          {describe(draft)}{beermile ? `. ${t('Penalty laps can be added per runner while timing.')}` : `: ${t('a tap at {points} m.', { points: draft.points.join(', ') })}`}
         </div>
       )}
 
       {!compact && (changed || error) && (
         <div className="row" style={{ gap: 8 }}>
-          <button className="btn ghost grow" disabled={busy} onClick={() => { setDraft(value); setPointsText(value.points.join(', ')); setError('') }}>Cancel</button>
-          <button className="btn primary grow" disabled={busy || Boolean(error) || !changed} onClick={() => onSave(normalise(draft))}>Save</button>
+          <button className="btn ghost grow" disabled={busy} onClick={() => { setDraft(value); setPointsText(value.points.join(', ')); setError('') }}>{t('Cancel')}</button>
+          <button className="btn primary grow" disabled={busy || Boolean(error) || !changed} onClick={() => onSave(normalise(draft))}>{t('Save')}</button>
         </div>
       )}
     </div>

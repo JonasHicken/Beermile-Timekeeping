@@ -1,3 +1,4 @@
+import { t, plural } from '../lib/i18n.js'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useOrganiser, sendLoginLink, logOut, myRaces, openMyRace, supabaseConfigured } from '../lib/organiser.js'
@@ -22,38 +23,38 @@ export default function OrganiserPanel() {
 
   async function login(e) {
     e.preventDefault()
-    if (!/^\S+@\S+\.\S+$/.test(email.trim())) { setError('Write your email address.'); return }
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) { setError(t('Write your email address.')); return }
     setBusy(true); setError('')
     try { await sendLoginLink(email); setSent(true) }
-    catch (err) { setError(`Could not send the link: ${err.message}`) }
+    catch (err) { setError(t('Could not send the link: {why}', { why: err.message })) }
     finally { setBusy(false) }
   }
 
   async function open(race) {
     setBusy(true); setError('')
     try { await openMyRace(race); nav(`/event/${race.id}/admin`) }
-    catch (err) { setError(`Could not open it: ${err.message}`) }
+    catch (err) { setError(t('Could not open it: {why}', { why: err.message })) }
     finally { setBusy(false) }
   }
 
   if (!user) {
     return (
       <div className="card stack" style={{ marginTop: 16, gap: 10 }}>
-        <div style={{ fontWeight: 700 }}>Organiser login</div>
+        <div style={{ fontWeight: 700 }}>{t('Organiser login')}</div>
         {sent ? (
           <div className="muted" style={{ fontSize: 15 }}>
-            Check your email: the link logs you in on the phone or computer where you open it.
-            <button className="btn ghost sm" style={{ marginLeft: 8 }} onClick={() => setSent(false)}>Use another address</button>
+            {t('Check your email: the link logs you in on the phone or computer where you open it.')}
+            <button className="btn ghost sm" style={{ marginLeft: 8 }} onClick={() => setSent(false)}>{t('Use another address')}</button>
           </div>
         ) : (
           <form className="row" style={{ gap: 8 }} onSubmit={login}>
-            <input className="grow" type="email" inputMode="email" autoComplete="email" placeholder="you@example.com"
-              value={email} onChange={(e) => setEmail(e.target.value)} style={{ minWidth: 0 }} aria-label="Email" />
-            <button className="btn" disabled={busy}>{busy ? '…' : 'Send link'}</button>
+            <input className="grow" type="email" inputMode="email" autoComplete="email" placeholder={t('you@example.com')}
+              value={email} onChange={(e) => setEmail(e.target.value)} style={{ minWidth: 0 }} aria-label={t('Email')} />
+            <button className="btn" disabled={busy}>{busy ? '…' : t('Send link')}</button>
           </form>
         )}
         <div className="muted tiny">
-          Log in to make a shared race, timed by several phones. No password: you get a link by email.
+          {t('Log in to make a shared race, timed by several phones. No password: you get a link by email.')}
         </div>
         {error && <div className="form-error">{error}</div>}
       </div>
@@ -64,25 +65,25 @@ export default function OrganiserPanel() {
     <div className="card stack" style={{ marginTop: 16, gap: 10 }}>
       <div className="row" style={{ gap: 8 }}>
         <div className="grow" style={{ minWidth: 0 }}>
-          <div style={{ fontWeight: 700 }}>My shared races</div>
-          <div className="muted tiny" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>Logged in as {user.email}</div>
+          <div style={{ fontWeight: 700 }}>{t('My shared races')}</div>
+          <div className="muted tiny" style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{t('Logged in as {email}', { email: user.email })}</div>
         </div>
-        <button className="btn ghost sm" onClick={() => logOut()}>Log out</button>
+        <button className="btn ghost sm" onClick={() => logOut()}>{t('Log out')}</button>
       </div>
-      {races == null ? <div className="muted tiny">Loading…</div> : races.length === 0 ? (
-        <div className="muted tiny">None yet. Tap “New event” and choose a shared race.</div>
+      {races == null ? <div className="muted tiny">{t('Loading…')}</div> : races.length === 0 ? (
+        <div className="muted tiny">{t('None yet. Tap “New event” and choose a shared race.')}</div>
       ) : (
         <div className="stack" style={{ gap: 0 }}>
           {races.map((r) => (
             <button key={r.id} className="admin-row row live-heat" disabled={busy} onClick={() => open(r)}>
               <span className="grow" style={{ textAlign: 'left', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.name}</span>
-              <span className="muted tiny">{[r.date, `${r.runners} runners`].filter(Boolean).join(' · ')}</span>
+              <span className="muted tiny">{[r.date, plural(r.runners, 'runner')].filter(Boolean).join(' · ')}</span>
               <span className="muted" aria-hidden>›</span>
             </button>
           ))}
         </div>
       )}
-      <div className="muted tiny">Races are deleted automatically three months after their date.</div>
+      <div className="muted tiny">{t('Races are deleted automatically three months after their date.')}</div>
       {error && <div className="form-error">{error}</div>}
     </div>
   )

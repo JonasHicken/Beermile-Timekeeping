@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js'
 import { useState } from 'react'
 import TimeInput from '../components/TimeInput.jsx'
 import { useParams, Link, useNavigate } from 'react-router-dom'
@@ -32,8 +33,8 @@ export default function Review() {
   if (!event || !heat) {
     return (
       <div className="app">
-        <Link to={`/event/${eventId}/setup`} className="backlink">← Setup</Link>
-        <div className="empty">Heat not found.</div>
+        <Link to={`/event/${eventId}/setup`} className="backlink">{t('← Setup')}</Link>
+        <div className="empty">{t('Heat not found.')}</div>
       </div>
     )
   }
@@ -64,20 +65,20 @@ export default function Review() {
   return (
     <div className="app">
       <div className="topbar">
-        <Link to={`/event/${eventId}/heat/${heatId}`} className="backlink">← Timing</Link>
+        <Link to={`/event/${eventId}/heat/${heatId}`} className="backlink">{t('← Timing')}</Link>
         <div className="spacer" />
-        <button className="btn ghost" onClick={() => nav(`/event/${eventId}/live`)}>Results</button>
+        <button className="btn ghost" onClick={() => nav(`/event/${eventId}/live`)}>{t('Results')}</button>
       </div>
 
-      <h1 style={{ margin: 0, fontSize: 26 }}>Review · {heat.name}</h1>
+      <h1 style={{ margin: 0, fontSize: 26 }}>{t('Review')} · {heat.name}</h1>
       <div className="muted tiny" style={{ textTransform: 'uppercase', letterSpacing: '.08em', marginTop: 6 }}>
-        {liveCount} crossings · tap a row to correct it
+        {t('{n} crossings · tap a row to correct it', { n: liveCount })}
       </div>
 
       {crossings.length === 0 && (
         <div className="empty">
-          <div className="display">Nothing logged yet</div>
-          Crossings recorded in this heat will appear here.
+          <div className="display">{t('Nothing logged yet')}</div>
+          {t('Crossings recorded in this heat will appear here.')}
         </div>
       )}
 
@@ -93,11 +94,11 @@ export default function Review() {
                 <span className="grow">
                   <span className="log-name">{runner?.name || '—'}</span>
                   {!c.void && (counted.has(c.id)
-                    ? <span className="muted tiny"> · lap {ordinals[c.id]}</span>
-                    : <span className="muted tiny"> · duplicate, not counted</span>)}
+                    ? <span className="muted tiny"> · {t('lap')} {ordinals[c.id]}</span>
+                    : <span className="muted tiny"> {t('· duplicate, not counted')}</span>)}
                   {c.void && c.rejected && (
                     <span className="muted tiny">
-                      {' · '}{REJECTED[c.rejected] ?? 'held back'}, not counted
+                      {' · '}{t(REJECTED[c.rejected] ?? 'held back')}, {t('not counted')}
                     </span>
                   )}
                 </span>
@@ -107,7 +108,7 @@ export default function Review() {
               {isEditing && (
                 <div className="log-edit stack">
                   <div>
-                    <span className="label">Belongs to</span>
+                    <span className="label">{t('Belongs to')}</span>
                     <select
                       value={c.runnerId}
                       onChange={(e) => reassignCrossing(c.id, e.target.value)}
@@ -118,7 +119,7 @@ export default function Review() {
                     </select>
                   </div>
                   <div>
-                    <span className="label">Time since the start</span>
+                    <span className="label">{t('Time since the start')}</span>
                     <TimeInput
                       key={c.capturedAt}
                       initialMs={c.capturedAt - heat.startedAt}
@@ -128,14 +129,14 @@ export default function Review() {
                   <div className="row">
                     {c.void ? (
                       <button className="btn grow" onClick={() => setCrossingVoid(c.id, false)}>
-                        {c.rejected ? 'Count this tap' : 'Restore crossing'}
+                        {c.rejected ? t('Count this tap') : t('Restore crossing')}
                       </button>
                     ) : (
                       <button className="btn danger grow" onClick={() => setCrossingVoid(c.id, true)}>
-                        Void crossing
+                        {t('Void crossing')}
                       </button>
                     )}
-                    <button className="btn ghost" onClick={() => setEditing(null)}>Done</button>
+                    <button className="btn ghost" onClick={() => setEditing(null)}>{t('Done')}</button>
                   </div>
                 </div>
               )}

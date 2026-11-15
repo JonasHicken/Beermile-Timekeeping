@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js'
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { joinWithLink, isAccessError, isNameError } from '../lib/online.js'
@@ -16,7 +17,7 @@ export default function Join() {
   const token = decodeURIComponent(window.location.hash.slice(1))
 
   useEffect(() => {
-    if (!token) { setError('This link is incomplete. Ask the organiser to send it again.'); return }
+    if (!token) { setError(t('This link is incomplete. Ask the organiser to send it again.')); return }
     if (!supabaseConfigured) {
       // Most likely an old copy of the app from the offline cache, saved before
       // the server was set up: the service worker serves it once more and
@@ -31,7 +32,7 @@ export default function Join() {
           .finally(() => window.location.reload())
         return
       }
-      setError('This copy of the app is not connected to the results server.')
+      setError(t('This copy of the app is not connected to the results server.'))
       return
     }
     let cancelled = false
@@ -41,8 +42,8 @@ export default function Join() {
         if (cancelled) return
         if (isNameError(e)) { setNeedName(isNameError(e)); return }
         setError(isAccessError(e)
-          ? 'This timing link is no longer valid. Ask the organiser for the new one.'
-          : 'Could not reach the server. Check your signal and open the link again.')
+          ? t('This timing link is no longer valid. Ask the organiser for the new one.')
+          : t('Could not reach the server. Check your signal and open the link again.'))
       },
     )
     return () => { cancelled = true }
@@ -51,7 +52,7 @@ export default function Join() {
   if (needName) {
     return (
       <div className="app">
-        <h1 style={{ margin: '8px 0 14px', fontSize: 26 }}>Timing</h1>
+        <h1 style={{ margin: '8px 0 14px', fontSize: 26 }}>{t('Timing')}</h1>
         <TimerCode eventId={eventId} token={token} hint={needName}
           onIn={(ev) => nav(`/event/${ev.id}/setup`, { replace: true })} />
       </div>
@@ -62,13 +63,13 @@ export default function Join() {
     <div className="app">
       {error ? (
         <div className="empty">
-          <div className="display">Can’t open the race</div>
+          <div className="display">{t('Can’t open the race')}</div>
           {error}
-          <div style={{ marginTop: 18 }}><Link to="/" className="btn">Home</Link></div>
+          <div style={{ marginTop: 18 }}><Link to="/" className="btn">{t('Home')}</Link></div>
         </div>
       ) : (
         <div className="empty">
-          <div className="display">Opening the race…</div>
+          <div className="display">{t('Opening the race…')}</div>
         </div>
       )}
     </div>

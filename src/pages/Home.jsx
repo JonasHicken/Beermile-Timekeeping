@@ -1,3 +1,4 @@
+import { t, plural, LANGS, useLang, setLang } from '../lib/i18n.js'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -36,7 +37,7 @@ export default function Home() {
     // A shared race is made on the server, then opened here as its admin.
     setBusy(true); setError('')
     try {
-      const ev = await createSharedRace({ name: name.trim() || 'Race', date, format })
+      const ev = await createSharedRace({ name: name.trim() || t('Race'), date, format })
       nav(`/event/${ev.id}/admin`)
     } catch (err) { setError(err.message) }
     finally { setBusy(false) }
@@ -50,31 +51,33 @@ export default function Home() {
         <div>
           <h1>Beermile <span className="accent">Timekeeping</span></h1>
         </div>
+        <div className="spacer" />
+        <LangSwitch />
       </div>
 
       {!creating && (
         <button className="btn primary lg block" onClick={() => setCreating(true)}>
-          + New event
+          {t('+ New event')}
         </button>
       )}
 
       {creating && (
         <form className="card stack" onSubmit={create}>
           <div>
-            <label className="label">Event name</label>
+            <label className="label">{t('Event name')}</label>
             <input
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Club championship 2027"
+              placeholder={t('Club championship 2027')}
             />
           </div>
           <div>
-            <label className="label">Date</label>
+            <label className="label">{t('Date')}</label>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
           <div>
-            <label className="label">Event</label>
+            <label className="label">{t('Event')}</label>
             <EventFormatEditor value={format} onSave={setFormat} compact />
           </div>
           {user && (
@@ -82,17 +85,17 @@ export default function Home() {
               <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)}
                 style={{ width: 20, height: 20, flex: 'none', margin: 0, accentColor: 'var(--amber)' }} />
               <span className="grow">
-                Shared race
-                <span className="muted tiny" style={{ display: 'block' }}>Timed by several phones: you get an admin link, and a timer link to send to helpers.</span>
+                {t('Shared race')}
+                <span className="muted tiny" style={{ display: 'block' }}>{t('Timed by several phones: you get an admin link, and a timer link to send to helpers.')}</span>
               </span>
             </label>
           )}
           {error && <div className="form-error">{error}</div>}
           <div className="row">
             <button type="button" className="btn ghost grow" onClick={() => setCreating(false)}>
-              Cancel
+              {t('Cancel')}
             </button>
-            <button type="submit" className="btn primary grow" disabled={busy}>{busy ? 'Creating…' : 'Create'}</button>
+            <button type="submit" className="btn primary grow" disabled={busy}>{busy ? t('Creating…') : t('Create')}</button>
           </div>
         </form>
       )}
@@ -104,8 +107,8 @@ export default function Home() {
 
       {events.length === 0 && !creating && (
         <div className="empty">
-          <div className="display">Race day starts here</div>
-          Create an event to build your start list.
+          <div className="display">{t('Race day starts here')}</div>
+          {t('Create an event to build your start list.')}
         </div>
       )}
 
@@ -115,13 +118,13 @@ export default function Home() {
             onLive={() => nav(`/event/${ev.id}/live`)}
             onHeat={(h) => nav(`/event/${ev.id}/heat/${h.id}`)}
             onDelete={() => askConfirm({
-              title: `Delete ${ev.name}?`,
-              body: 'Removes the event, its start list, heats and every recorded time. You can undo it straight after.',
-              confirmLabel: 'Delete event',
+              title: t('Delete {name}?', { name: ev.name }),
+              body: t('Removes the event, its start list, heats and every recorded time. You can undo it straight after.'),
+              confirmLabel: t('Delete event'),
               danger: true,
               onConfirm: () => {
                 const snap = deleteEvent(ev.id)
-                offerUndo(`Deleted ${ev.name}`, () => restoreEvent(snap))
+                offerUndo(t('Deleted {name}', { name: ev.name }), () => restoreEvent(snap))
               },
             })}
           />
@@ -145,21 +148,36 @@ function EventRow({ ev, onOpen, onLive, onHeat, onDelete }) {
       <div className="row">
         <div className="grow" onClick={onOpen} style={{ cursor: 'pointer' }}>
           <div className="ev-name">
-            {ev.name} {ev.online && <span className="pill live" style={{ verticalAlign: 3 }}>Shared</span>}
+            {ev.name} {ev.online && <span className="pill live" style={{ verticalAlign: 3 }}>{t('Shared')}</span>}
           </div>
           <div className="ev-meta">
-            {ev.date} · {describe(formatOf(ev))} · {runners} runners · {heats} {heats === 1 ? 'heat' : 'heats'}
+            {ev.date} · {describe(formatOf(ev))} · {plural(runners, 'runner')} · {plural(heats, 'heat')}
           </div>
-          {running && <div className="running-note">● {running.name} is running</div>}
+          {running && <div className="running-note">● {t('{name} is running', { name: running.name })}</div>}
         </div>
-        <button className="btn ghost danger" onClick={onDelete} aria-label="Delete">✕</button>
+        <button className="btn ghost danger" onClick={onDelete} aria-label={t('Delete')}>✕</button>
       </div>
       <div className="row">
         {running
-          ? <button className="btn primary grow" onClick={() => onHeat(running)}>Resume {running.name}</button>
-          : <button className="btn grow" onClick={onOpen}>Setup / Time</button>}
-        <button className="btn grow" onClick={onLive}>Results</button>
+          ? <button className="btn primary grow" onClick={() => onHeat(running)}>{t('Resume {name}', { name: running.name })}</button>
+          : <button className="btn grow" onClick={onOpen}>{t('Setup / Time')}</button>}
+        <button className="btn grow" onClick={onLive}>{t('Results')}</button>
       </div>
+    </div>
+  )
+}
+
+// Norsk / English, kept on this phone.
+function LangSwitch() {
+  const lang = useLang()
+  return (
+    <div className="chips lang-switch" role="radiogroup" aria-label="Språk / Language">
+      {LANGS.map((l) => (
+        <button key={l.id} type="button" role="radio" aria-checked={lang === l.id}
+          className={`chip${lang === l.id ? ' on' : ''}`} onClick={() => setLang(l.id)} lang={l.id === 'no' ? 'nb' : 'en'}>
+          {l.id === 'no' ? 'NO' : 'EN'}
+        </button>
+      ))}
     </div>
   )
 }

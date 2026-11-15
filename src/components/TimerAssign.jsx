@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js'
 import { useState } from 'react'
 import { saveTimers, timerLink, NotAdminError } from '../lib/online.js'
 
@@ -16,11 +17,11 @@ export default function TimerAssign({ event, runners, offerUndo }) {
     setBusy(true); setMsg(null)
     try {
       await saveTimers(event.id, change)
-      if (undoLabel) offerUndo(undoLabel, () => saveTimers(event.id, undoChange).catch(() => setMsg({ text: 'Undo failed: no signal. Try again.', error: true })))
+      if (undoLabel) offerUndo(undoLabel, () => saveTimers(event.id, undoChange).catch(() => setMsg({ text: t('Undo failed: no signal. Try again.'), error: true })))
       return true
     } catch (e) {
       setMsg({
-        text: e instanceof NotAdminError ? 'Only the admin link can change this.' : 'Not saved: no signal. Try again.',
+        text: e instanceof NotAdminError ? t('Only the admin link can change this.') : t('Not saved: no signal. Try again.'),
         error: true,
       })
       return false
@@ -33,44 +34,43 @@ export default function TimerAssign({ event, runners, offerUndo }) {
     e.preventDefault()
     const n = newName.trim().slice(0, 30)
     if (!n) return
-    if (names.some((x) => x.toLowerCase() === n.toLowerCase())) { setMsg({ text: `${n} is already on the list.`, error: true }); return }
+    if (names.some((x) => x.toLowerCase() === n.toLowerCase())) { setMsg({ text: t('{name} is already on the list.', { name: n }), error: true }); return }
     save({ names: [...names, n] }).then((ok) => ok && setNewName(''))
   }
 
   function removeName(n) {
     const theirs = runners.filter((r) => r.timer === n)
-    save({ names: names.filter((x) => x !== n) }, `Removed ${n}`, { names, assignment: current(theirs) })
+    save({ names: names.filter((x) => x !== n) }, t('Removed {name}', { name: n }), { names, assignment: current(theirs) })
   }
 
   async function shareLink() {
     if (!link) return
     try {
-      if (navigator.share) { await navigator.share({ title: `${event.name} · timing`, url: link }); return }
+      if (navigator.share) { await navigator.share({ title: `${event.name} · ${t('timing')}`, url: link }); return }
     } catch { return /* closed the share sheet */ }
-    try { await navigator.clipboard.writeText(link); setMsg({ text: 'Timer link copied.' }) }
-    catch { window.prompt('Copy the timer link:', link) }
+    try { await navigator.clipboard.writeText(link); setMsg({ text: t('Timer link copied.') }) }
+    catch { window.prompt(t('Copy the timer link:'), link) }
   }
 
   return (
       <div className="card stack" style={{ gap: 10 }}>
         <div className="muted" style={{ fontSize: 15 }}>
-          Add each timer by name, then share the link. They get in by typing their name (any upper/lower case),
-          so the link alone is no use to anyone else. Give them runners in the start list below.
+          {t('Add each timer by name, then share the link. They get in by typing their name (any upper/lower case), so the link alone is no use to anyone else. Give them runners in the start list below.')}
         </div>
         {link
-          ? <button className="btn primary" onClick={shareLink}>Share the timer link</button>
-          : <div className="muted tiny">The timer link appears here once the server has answered.</div>}
+          ? <button className="btn primary" onClick={shareLink}>{t('Share the timer link')}</button>
+          : <div className="muted tiny">{t('The timer link appears here once the server has answered.')}</div>}
 
         <form className="row wrap" style={{ gap: 6 }} onSubmit={addName}>
-          <input className="grow" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Timer's name" aria-label="Timer's name" maxLength={30} style={{ minWidth: 0 }} />
-          <button className="btn" type="submit" disabled={busy || !newName.trim()}>Add</button>
+          <input className="grow" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t('Timer\'s name')} aria-label={t('Timer\'s name')} maxLength={30} style={{ minWidth: 0 }} />
+          <button className="btn" type="submit" disabled={busy || !newName.trim()}>{t('Add')}</button>
         </form>
         {names.length > 0 && (
           <div className="row wrap" style={{ gap: 6 }}>
             {names.map((n) => (
               <span key={n} className="chip on" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                 {n} <span className="tiny" style={{ opacity: .65 }}>{runners.filter((r) => r.timer === n).length}</span>
-                <button className="t-more" style={{ padding: '0 4px' }} disabled={busy} onClick={() => removeName(n)} aria-label={`Remove ${n}`}>✕</button>
+                <button className="t-more" style={{ padding: '0 4px' }} disabled={busy} onClick={() => removeName(n)} aria-label={t('Remove {name}', { name: n })}>✕</button>
               </span>
             ))}
           </div>

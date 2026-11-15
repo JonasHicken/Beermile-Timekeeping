@@ -1,3 +1,4 @@
+import { t, plural } from '../lib/i18n.js'
 import { formatOf, splitLabel } from '../lib/eventFormat.js'
 import { useEffect, useState } from 'react'
 import { useStore, standings, heatsInEvent } from '../lib/store.js'
@@ -7,7 +8,6 @@ import { classesIn, fastestLaps, podiums, recordRows } from '../lib/raceResults.
 import { drawResults, sharePicture } from '../lib/shareImage.js'
 import ResultCorrections from './ResultCorrections.jsx'
 
-const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
 
 // Race admin's Results tab: each runner's fastest lap, a picture of the top
 // three per class to post, and sending the times to the race website's
@@ -38,23 +38,20 @@ export default function RaceResults({ event, askConfirm, offerUndo }) {
     try {
       const blob = await drawResults({ title: event.name, date: event.date, podiums: pods, mascot: withMascot })
       setPicture({ blob, url: URL.createObjectURL(blob) })
-    } catch { setNote({ text: 'Could not make the picture on this phone.', error: true }) }
+    } catch { setNote({ text: t('Could not make the picture on this phone.'), error: true }) }
     finally { setBusy(false) }
   }
 
   async function share() {
     const how = await sharePicture(picture.blob, event.name)
-    if (how === 'downloaded') setNote({ text: 'Saved as resultater.png. Post it from your photos.' })
+    if (how === 'downloaded') setNote({ text: t('Saved as resultater.png. Post it from your photos.') })
   }
 
   function askSend() {
     askConfirm({
-      title: `Send ${plural(toRecords.length, 'time')} to ${eksport?.navn ?? 'the records list'}?`,
-      body:
-        'Women’s, men’s and relay finishing times go to the website’s approval queue, rounded up to whole seconds, with each split. ' +
-        'Nothing is public until you approve each one there, so check that the runners are happy to be listed. ' +
-        'A runner already sent is not added twice; sending again updates their time while it waits.',
-      confirmLabel: 'Send',
+      title: t('Send {n} to {site}?', { n: plural(toRecords.length, 'time'), site: eksport?.navn ?? t('the records list') }),
+      body: t('Women’s, men’s and relay finishing times go to the website’s approval queue, rounded up to whole seconds, with each split. Nothing is public until you approve each one there, so check that the runners are happy to be listed. A runner already sent is not added twice; sending again updates their time while it waits.'),
+      confirmLabel: t('Send'),
       onConfirm: async () => {
         setBusy(true); setNote(null)
         try {
@@ -63,12 +60,12 @@ export default function RaceResults({ event, askConfirm, offerUndo }) {
           const before = res.oppdatert ?? 0
           const approved = res.godkjent ?? 0
           setNote({ text: [
-            `${plural(sent, 'time')} sent to the approval queue.`,
-            before ? `${before} sent before, updated.` : '',
-            approved ? `${approved} already approved, left as they are: change those on ${eksport.navn ?? 'the website'}.` : '',
+            t('{n} sent to the approval queue.', { n: plural(sent, 'time') }),
+            before ? t('{n} sent before, updated.', { n: before }) : '',
+            approved ? t('{n} already approved, left as they are: change those on {site}.', { n: approved, site: eksport.navn ?? t('the website') }) : '',
           ].filter(Boolean).join(' ') })
         } catch (e) {
-          setNote({ text: `Not sent: ${e.message}`, error: true })
+          setNote({ text: t('Not sent: {why}', { why: e.message }), error: true })
         } finally { setBusy(false) }
       },
     })
@@ -78,29 +75,29 @@ export default function RaceResults({ event, askConfirm, offerUndo }) {
     <div className="stack" style={{ marginTop: 14, gap: 14 }}>
       {open > 0 && (
         <div className="card muted" style={{ fontSize: 15 }}>
-          {plural(open, 'heat')} not finished yet, so these results can still change.
+          {t('{n} not finished yet, so these results can still change.', { n: plural(open, 'heat') })}
         </div>
       )}
 
-      <h2 className="admin-h" style={{ marginTop: 6 }}>Results</h2>
+      <h2 className="admin-h" style={{ marginTop: 6 }}>{t('Results')}</h2>
       {st.finishers.length + st.didNotFinish.length === 0 ? (
-        <div className="muted">Nobody has finished yet.</div>
+        <div className="muted">{t('Nobody has finished yet.')}</div>
       ) : (
         <>
           <ResultCorrections event={event} finishers={st.finishers} out={st.didNotFinish} askConfirm={askConfirm} offerUndo={offerUndo} />
-          <div className="muted tiny">Tap Edit to correct a name, a bib or a finishing time. Each change asks first and can be undone.</div>
+          <div className="muted tiny">{t('Tap Edit to correct a name, a bib or a finishing time. Each change asks first and can be undone.')}</div>
         </>
       )}
 
-      <h2 className="admin-h">Fastest laps</h2>
+      <h2 className="admin-h">{t('Fastest laps')}</h2>
       {laps.length === 0 ? (
-        <div className="muted">No laps recorded yet.</div>
+        <div className="muted">{t('No laps recorded yet.')}</div>
       ) : (
         <>
           <div className="chips">
-            <button className={`chip${cls == null ? ' on' : ''}`} onClick={() => setCls(null)}>All</button>
+            <button className={`chip${cls == null ? ' on' : ''}`} onClick={() => setCls(null)}>{t('All')}</button>
             {classesIn(laps.map((x) => ({ runner: x.runner }))).map((c) => (
-              <button key={c} className={`chip${cls === c ? ' on' : ''}`} onClick={() => setCls(c)}>{c || 'No class'}</button>
+              <button key={c} className={`chip${cls === c ? ' on' : ''}`} onClick={() => setCls(c)}>{c || t('No class')}</button>
             ))}
           </div>
           <div className="stack" style={{ gap: 0 }}>
@@ -116,47 +113,47 @@ export default function RaceResults({ event, askConfirm, offerUndo }) {
               </div>
             ))}
           </div>
-          <div className="muted tiny">Each runner’s fastest split. The first is from the start.</div>
+          <div className="muted tiny">{t('Each runner’s fastest split. The first is from the start.')}</div>
         </>
       )}
 
-      <h2 className="admin-h">Share the top 3</h2>
+      <h2 className="admin-h">{t('Share the top 3')}</h2>
       {pods.length === 0 ? (
-        <div className="muted">The picture can be made once someone has finished.</div>
+        <div className="muted">{t('The picture can be made once someone has finished.')}</div>
       ) : (
         <div className="card stack" style={{ gap: 10 }}>
           <div className="muted" style={{ fontSize: 15 }}>
-            A picture of the top three in each class, sized for an Instagram post. Share it straight from the phone.
+            {t('A picture of the top three in each class, sized for an Instagram post. Share it straight from the phone.')}
           </div>
           <label className="row" style={{ gap: 10 }}>
             <input type="checkbox" checked={mascot} disabled={busy}
               onChange={(e) => { setMascot(e.target.checked); if (picture) makePicture(e.target.checked) }}
               style={{ width: 20, height: 20, flex: 'none', margin: 0, accentColor: 'var(--amber)' }} />
-            <span>Show the mascot</span>
+            <span>{t('Show the mascot')}</span>
           </label>
           {mascot && (
             <div className="muted tiny">
-              Beer imagery in a post about an event can count as alcohol advertising (in Norway, alkoholloven § 9-2). Your call per post.
+              {t('Beer imagery in a post about an event can count as alcohol advertising (in Norway, alkoholloven § 9-2). Your call per post.')}
             </div>
           )}
-          {picture && <img src={picture.url} alt="Results picture: the top three in each class" style={{ width: '100%', borderRadius: 10, border: '1px solid var(--line)' }} />}
+          {picture && <img src={picture.url} alt={t('Results picture: the top three in each class')} style={{ width: '100%', borderRadius: 10, border: '1px solid var(--line)' }} />}
           <div className="row" style={{ gap: 8 }}>
             <button className={`btn grow${picture ? '' : ' primary'}`} disabled={busy} onClick={() => makePicture()}>
-              {picture ? 'Make it again' : 'Make the picture'}
+              {picture ? t('Make it again') : t('Make the picture')}
             </button>
-            {picture && <button className="btn primary grow" onClick={share}>Share</button>}
+            {picture && <button className="btn primary grow" onClick={share}>{t('Share')}</button>}
           </div>
         </div>
       )}
 
       {eksport && <>
-        <h2 className="admin-h">Records list</h2>
+        <h2 className="admin-h">{t('Records list')}</h2>
         <div className="card stack" style={{ gap: 10 }}>
           <div className="muted" style={{ fontSize: 15 }}>
-            Send the women’s, men’s and relay times to {eksport.navn ?? 'the linked website'}’s records list. They wait in its approval queue until they are approved there.
+            {t('Send the women’s, men’s and relay times to the records list on {site}. They wait in its approval queue until they are approved there.', { site: eksport.navn ?? t('the linked website') })}
           </div>
           <button className="btn" disabled={busy || toRecords.length === 0} onClick={askSend}>
-            {toRecords.length ? `Send ${plural(toRecords.length, 'time')}` : 'No finishing times to send yet'}
+            {toRecords.length ? t('Send {n}', { n: plural(toRecords.length, 'time') }) : t('No finishing times to send yet')}
           </button>
         </div>
       </>}

@@ -1,3 +1,4 @@
+import { t } from '../lib/i18n.js'
 import { sendToRecords } from '../lib/recordsExport.js'
 import { useState } from 'react'
 import { getState, standings, setCrossingTime } from '../lib/store.js'
@@ -22,12 +23,12 @@ export default function ResultCorrections({ event, finishers, out, askConfirm, o
 
   const say = (text, error = false) => setNote({ text, error })
   const recordNote = (res) => (res?.godkjent
-    ? ` This result is already approved on ${event.online?.eksport?.navn ?? 'the records list'}: change it there too.`
+    ? ` ${t('This result is already approved on {site}: change it there too.', { site: event.online?.eksport?.navn ?? t('the records list') })}`
     : '')
   // Resolves to the server's answer, or null after saying what went wrong.
   async function server(fn, args) {
     try { return await adminCall(event.id, fn, args) }
-    catch (e) { say(`Not saved: ${e.message}`, true); return null }
+    catch (e) { say(t('Not saved: {why}', { why: e.message }), true); return null }
   }
 
   function saveName(row, name) {
@@ -35,15 +36,15 @@ export default function ResultCorrections({ event, finishers, out, askConfirm, o
     const to = name.trim()
     if (!to || to === from) return
     askConfirm({
-      title: 'Change the name?',
-      body: `“${from}” becomes “${to}” in the results, the start list and the sign-up, on every phone and on the race page.`,
-      confirmLabel: 'Change name',
+      title: t('Change the name?'),
+      body: t('“{from}” becomes “{to}” in the results, the start list and the sign-up, on every phone and on the race page.', { from, to }),
+      confirmLabel: t('Change name'),
       danger: true,
       onConfirm: async () => {
         if (await server('tk_admin_rett_loper', { p_runner_id: row.runner.id, p_navn: to }) === null) return
         const res = await syncRecord(row.runner.id)
-        say(`Name changed.${recordNote(res)}`)
-        offerUndo(`Name: ${to}`, async () => {
+        say(`${t('Name changed.')}${recordNote(res)}`)
+        offerUndo(`${t('Name')}: ${to}`, async () => {
           await server('tk_admin_rett_loper', { p_runner_id: row.runner.id, p_navn: from })
           await syncRecord(row.runner.id)
         })
@@ -54,7 +55,7 @@ export default function ResultCorrections({ event, finishers, out, askConfirm, o
   function saveBib(row, input) {
     const from = Number(row.runner.bib)
     const to = Number(String(input).trim())
-    if (!Number.isInteger(to) || to < 1 || to > 9999) { say('A bib is a number from 1 to 9999.', true); return }
+    if (!Number.isInteger(to) || to < 1 || to > 9999) { say(t('A bib is a number from 1 to 9999.'), true); return }
     if (to === from) return
     const set = async (swap) => {
       try {
@@ -64,19 +65,19 @@ export default function ResultCorrections({ event, finishers, out, askConfirm, o
       } catch (e) {
         if (e.hint === 'opptatt' && !swap) {
           askConfirm({
-            title: `Bib ${to} is taken`,
-            body: `${e.detail || 'Someone else'} has ${to}. Swap, so they get ${from}?`,
+            title: t('Bib {bib} is taken', { bib: to }),
+            body: t('{name} has {to}. Swap, so they get {from}?', { name: e.detail || t('Someone else'), to, from }),
             confirmLabel: 'Swap',
             danger: true,
             onConfirm: () => set(true),
           })
-        } else say(`Not saved: ${e.message}`, true)
+        } else say(t('Not saved: {why}', { why: e.message }), true)
       }
     }
     askConfirm({
-      title: 'Change the bib?',
-      body: `${row.runner.name} gets bib ${to} instead of ${from}, in the results, the start list and the sign-up, on every phone and on the race page.`,
-      confirmLabel: 'Change bib',
+      title: t('Change the bib?'),
+      body: t('{name} gets bib {to} instead of {from}, in the results, the start list and the sign-up, on every phone and on the race page.', { name: row.runner.name, to, from }),
+      confirmLabel: t('Change bib'),
       danger: true,
       onConfirm: () => set(false),
     })
@@ -87,29 +88,29 @@ export default function ResultCorrections({ event, finishers, out, askConfirm, o
   function saveTime(row, ms) {
     const need = row.requiredLaps
     const finish = row.laps[need - 1]
-    if (!finish || row.heat?.startedAt == null) return 'This result has no finishing tap to move.'
+    if (!finish || row.heat?.startedAt == null) return t('This result has no finishing tap to move.')
     const start = row.heat.startedAt
     const before = need > 1 ? row.laps[need - 2].at - start : 0
-    if (ms <= before) return `It has to be after the previous lap (${fmt(before)}).`
+    if (ms <= before) return t('It has to be after the previous lap ({time}).', { time: fmt(before) })
     // The same time again: nothing to move, but the records list's copy is
     // sent once more (what to do when it could not be updated last time).
     if (ms === row.elapsed) {
-      syncRecord(row.runner.id).then((res) => { if (res) say(`Records list up to date.${recordNote(res)}`) })
+      syncRecord(row.runner.id).then((res) => { if (res) say(`${t('Records list up to date.')}${recordNote(res)}`) })
       return undefined
     }
     const oldAt = finish.at
     askConfirm({
-      title: 'Change the finishing time?',
-      body: `${row.runner.name}: ${fmt(row.elapsed)} becomes ${fmt(ms)}. The places, the results and the race page change with it. The laps before stay as they are.`,
-      confirmLabel: 'Change time',
+      title: t('Change the finishing time?'),
+      body: t('{name}: {from} becomes {to}. The places, the results and the race page change with it. The laps before stay as they are.', { name: row.runner.name, from: fmt(row.elapsed), to: fmt(ms) }),
+      confirmLabel: t('Change time'),
       danger: true,
       onConfirm: async () => {
         // The tap moves on this phone at once and reaches the others with the
         // next sync; only the records list's copy needs the server right now.
         setCrossingTime(finish.id, start + ms)
         const res = await syncRecord(row.runner.id)
-        if (res !== null) say(`Time changed.${recordNote(res)}`)
-        offerUndo(`Time: ${fmt(ms)}`, async () => { setCrossingTime(finish.id, oldAt); await syncRecord(row.runner.id) })
+        if (res !== null) say(`${t('Time changed.')}${recordNote(res)}`)
+        offerUndo(`${t('Time')}: ${fmt(ms)}`, async () => { setCrossingTime(finish.id, oldAt); await syncRecord(row.runner.id) })
       },
     })
     return undefined
@@ -124,7 +125,7 @@ export default function ResultCorrections({ event, finishers, out, askConfirm, o
     const rec = now && recordRows([now])[0]
     if (!eksport || !rec) return undefined
     try { return await sendToRecords(eksport, [{ ...rec, bare_oppdater: true }]) }
-    catch (e) { say(`Changed here, but ${eksport.navn ?? 'the records list'} could not be updated: ${e.message}`, true); return null }
+    catch (e) { say(t('Changed here, but {site} could not be updated: {why}', { site: eksport.navn ?? t('the records list'), why: e.message }), true); return null }
   }
 
   const rowView = (row, place) => {
@@ -155,7 +156,7 @@ export default function ResultCorrections({ event, finishers, out, askConfirm, o
       ))}
       {out.length > 0 && (
         <div>
-          <div style={{ fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>Out of the race</div>
+          <div style={{ fontWeight: 700, color: 'var(--muted)', marginBottom: 4 }}>{t('Out of the race')}</div>
           {out.map((r) => rowView(r, null))}
         </div>
       )}
@@ -170,23 +171,23 @@ function EditForm({ row, onName, onBib, onTime }) {
   return (
     <div className="stack" style={{ gap: 10, marginTop: 10, padding: '12px 0 4px' }}>
       <label className="stack" style={{ gap: 4 }}>
-        <span className="label">Name</span>
+        <span className="label">{t('Name')}</span>
         <div className="row" style={{ gap: 8 }}>
           <input className="grow" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} style={{ minWidth: 0 }} />
-          <button className="btn" disabled={!name.trim() || name.trim() === row.runner.name} onClick={() => onName(name)}>Save</button>
+          <button className="btn" disabled={!name.trim() || name.trim() === row.runner.name} onClick={() => onName(name)}>{t('Save')}</button>
         </div>
       </label>
-      {row.runner.category === 'Stafett' && <div className="muted tiny">A relay team is written “Team (Runner og Runner)”.</div>}
+      {row.runner.category === 'Stafett' && <div className="muted tiny">{t('A relay team is written “Team (Runner og Runner)”.')}</div>}
       <label className="stack" style={{ gap: 4 }}>
-        <span className="label">Bib</span>
+        <span className="label">{t('Bib')}</span>
         <div className="row" style={{ gap: 8 }}>
           <input className="grow" inputMode="numeric" value={bib} onChange={(e) => setBib(e.target.value.replace(/\D/g, ''))} style={{ minWidth: 0 }} />
-          <button className="btn" disabled={!bib || bib === row.runner.bib} onClick={() => onBib(bib)}>Save</button>
+          <button className="btn" disabled={!bib || bib === row.runner.bib} onClick={() => onBib(bib)}>{t('Save')}</button>
         </div>
       </label>
       {row.finished && (
         <div className="stack" style={{ gap: 4 }}>
-          <span className="label">Finishing time</span>
+          <span className="label">{t('Finishing time')}</span>
           <TimeInput initialMs={row.elapsed} submitLabel="Save" onSubmit={onTime} />
         </div>
       )}
