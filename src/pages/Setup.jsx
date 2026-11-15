@@ -12,7 +12,9 @@ import ImportDialog from '../components/ImportDialog.jsx'
 import BibAssign from '../components/BibAssign.jsx'
 import SyncBadge from '../components/SyncBadge.jsx'
 import TimerCode from '../components/TimerCode.jsx'
-import NumberField, { ordinal } from '../components/NumberField.jsx'
+import NumberField from '../components/NumberField.jsx'
+import EventFormatEditor from '../components/EventFormatEditor.jsx'
+import { formatOf, describe, formatChangeWarning } from '../lib/eventFormat.js'
 import { useOnlineSync, useSyncStatus } from '../lib/online.js'
 
 const plural = (n, one, many = `${one}s`) => `${n} ${n === 1 ? one : many}`
@@ -92,33 +94,23 @@ export default function Setup() {
         })
   }
 
-  // Results are worked out from the lap count, so changing it once laps are
-  // recorded changes every result at once. That used to happen silently, on
-  // every keystroke: clearing the box to type a new number made it 1 lap, and
-  // the results crowned the fastest first lap as the winner.
-  function changeLaps(n) {
-    if (n === event.numLaps) return true
+  // Results are worked out from the timing points, so changing how many there
+  // are once laps are recorded changes every result at once: it asks first.
+  function changeFormat(f) {
+    const was = { format: event.format, numLaps: event.numLaps }
     const apply = () => {
-      const was = event.numLaps
-      updateEvent(eventId, { numLaps: n })
-      offerUndo(`Laps changed to ${n}`, () => updateEvent(eventId, { numLaps: was }))
+      updateEvent(eventId, { format: f, numLaps: f.points.length })
+      offerUndo(`Event: ${describe(f)}`, () => updateEvent(eventId, was))
     }
-    if (!timedCount) { apply(); return true }
-    const finished = standings(getState(), eventId).finishers.length
+    const before = formatOf(event).points.length
+    if (!timedCount || f.points.length === before) { apply(); return }
     askConfirm({
-      title: `Change to ${plural(n, 'lap')}?`,
-      body:
-        `Laps are already recorded for this event. Every result is worked out from the lap count, so ` +
-        (n > event.numLaps
-          ? `runners who finished ${plural(event.numLaps, 'lap')} will count as still on course until a ${ordinal(n)} lap is recorded` +
-            (finished ? ` (${plural(finished, 'runner')} finished right now).` : '.')
-          : `runners will finish after ${plural(n, 'lap')}, and their time becomes their ${ordinal(n)} lap — later laps no longer count.`) +
-        ' Penalty laps still come on top.',
-      confirmLabel: `Change to ${n}`,
+      title: `Change to ${plural(f.points.length, 'timing point')}?`,
+      body: formatChangeWarning(before, f.points.length, standings(getState(), eventId).finishers.length),
+      confirmLabel: 'Change',
       danger: true,
       onConfirm: apply,
     })
-    return false
   }
 
   // Frozen order, with any runner added meanwhile appended rather than dropped.
@@ -193,7 +185,7 @@ export default function Setup() {
       {online ? (
         <div className="stack">
           <h1 style={{ margin: 0, fontSize: 26 }}>{event.name}</h1>
-          <div className="muted tiny">{event.date} · {plural(event.numLaps, 'lap')}</div>
+          <div className="muted tiny">{event.date} · {describe(formatOf(event))}</div>
           {roleOf(event) === 'admin' ? (
             <button className="btn block admin-entry" onClick={() => nav(`/event/${eventId}/admin`)}>
               <span>Race admin</span>
@@ -241,10 +233,10 @@ export default function Setup() {
             <label className="label">Date</label>
             <input type="date" value={event.date} onChange={(e) => updateEvent(eventId, { date: e.target.value })} />
           </div>
-          <div style={{ width: 110 }}>
-            <label className="label">Laps</label>
-            <NumberField value={event.numLaps} min={1} max={20} onCommit={changeLaps} label="Laps" />
-          </div>
+        </div>
+        <div>
+          <label className="label">Event</label>
+          <EventFormatEditor value={formatOf(event)} onSave={changeFormat} />
         </div>
       </div>
       )}

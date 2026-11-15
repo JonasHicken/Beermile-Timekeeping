@@ -46,6 +46,10 @@ export function recordRows(finishers) {
     .filter((r) => RECORD_CLASSES.includes(r.runner.category))
     .map((r) => ({
       runner_id: r.runner.id,
+      // The receiving site has no copy of the start list, so the name and
+      // class travel with the time.
+      navn: r.runner.name,
+      kategori: r.runner.category,
       sekunder: recordSeconds(r.elapsed),
       runder: (r.laps ?? []).slice(0, r.requiredLaps ?? r.laps?.length).map((l) => Math.round(l.split / 1000)),
     }))

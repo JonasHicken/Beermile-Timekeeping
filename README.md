@@ -137,18 +137,18 @@ request is made.
 
 1. **Create a Supabase project** at [supabase.com](https://supabase.com). The
    free tier is enough.
-2. **Create the tables.** In the Supabase dashboard, open **SQL Editor**,
+2. **Create the database.** In the Supabase dashboard, open **SQL Editor**,
    paste this repo's [`supabase/schema.sql`](supabase/schema.sql) and run it.
-   It is safe to run again, and its tables are prefixed `tk_`, so it can share
-   a project with other tables.
-3. **Add the race functions.** Shared races, the two links, Race admin and the
-   results export are database functions that live in the companion website's
-   schema, because that is where races and sign-ups are created: **PART 17**
-   (private races) and **PART 18** (live timing) of
-   [`supabase/schema.sql` in Beermile-Norge-](https://github.com/JonasHicken/Beermile-Norge-/blob/main/supabase/schema.sql).
-   They build on that schema's earlier parts (admins and the results table),
-   so run the whole file. Moving them into this repo, so the app can run
-   shared races on its own, is on the roadmap.
+   It holds everything shared races need: the tables, the two links, Race
+   admin, organiser accounts and public results. It is safe to run again
+   after an update, and its tables are prefixed `tk_`, so it can share a
+   project with other tables.
+3. **Allow logins back to the app.** Under **Authentication → URL
+   Configuration**, set the Site URL to where the app is served, and add
+   `http://localhost:5173/**` to Redirect URLs while you develop. Organisers
+   log in with a link by email. Supabase's built-in email only reaches your
+   project's own team; for other organisers, add your own SMTP under
+   **Authentication → Emails**.
 4. **Point the app at your project.** Copy `.env.example` to `.env` and fill in:
 
    ```bash
@@ -167,28 +167,49 @@ request is made.
 
 ### Starting a shared race
 
-A race is created on the website side, which hands out its links:
-
-1. Create a private race and link it to timing (in the companion site this is
-   `/admin/privatlop`). That creates the timing event and two links,
-   `<app address>/join/<event id>#<token>`: an admin link and a timer link.
-2. Open the **admin link** on the organiser's phone and tap **Race admin**.
-   Make the heats, assign bibs, add the timers by name, give them their
-   runners, and share the timer link from there.
-3. Each timer opens the **timer link**, types their name and lands on their
+1. On the app's home page, log in under **Organiser login** (a link arrives
+   by email).
+2. Tap **New event**, choose the event, tick **Shared race** and create it.
+   The race opens in **Race admin** on this phone.
+3. In Race admin, build the start list and heats, add the timers by name,
+   give them their runners, and share the timer link
+   (`<app address>/join/<event id>#<token>`) from the **Timers** tab.
+4. Each timer opens the timer link, types their name and lands on their
    heat. The admin starts the heat; every phone starts with it.
 
 The token sits after the `#`, so it is never sent to a web server or written
-to its logs. A phone keeps the race once it has opened the link.
+to its logs. A phone keeps the race once it has opened the link, and **My
+shared races** on the home page opens it again on any phone you log in on.
+Races are deleted automatically three months after their date.
+
+### Linking a website
+
+A website can link one of its own events to a shared race through the race's
+admin link: it can send its sign-ups in as the start list, show the results
+while **Results on the race page** is on (`tk_offentlig`, by the race's id),
+and give the race a place to send finishing times (`tk_admin_sett_eksport`).
+The Results tab then shows **Send to records list**, which calls the site's
+own function with a key that belongs to that one race. Nothing about the site
+is in this app's code: it is all stored with the race, visible to its admin
+link only.
+
+### Keeping a free project awake
+
+Supabase pauses a free project after a week without use.
+[`.github/workflows/keep-awake.yml`](.github/workflows/keep-awake.yml) calls
+the database every third day (and clears out expired races while it is at
+it). Add the repository secrets `TIMING_SUPABASE_URL` and
+`TIMING_SUPABASE_KEY` (the publishable key) for it to run; without them it
+does nothing.
 
 ### Is the publishable key safe to ship?
 
 Yes, that is what it is for: every web app that talks to Supabase ships it.
 It does not protect the data; the database does. All timing data is reached
 through functions that check the admin or timer link (and the timer's name),
-and the tables themselves are closed to direct writes. Entrant email is
-additionally protected by a column-level grant, because row-level security
-alone would not stop the public key reading every entrant's address.
+or the organiser's login, and the tables themselves are closed to direct reads
+and writes. A race's results are readable without a link only while its admin
+has switched them on.
 
 ## Roadmap
 
@@ -197,7 +218,7 @@ alone would not stop the public key reading every entrant's address.
 - [x] Shared races: several phones timing one race
 - [x] Admin and timer links, timer codes, Race admin (start list import, heats, bibs, late runners, timers)
 - [x] Results: fastest laps, top-3 picture to share, export to a records list
-- [ ] Shared races without the companion website: the race functions in this repo's schema
+- [x] Shared races without the companion website: organiser login and the race functions in this repo's schema
 - [ ] RFID input module: reader bridge → same crossings log → hands-off + lap splits
 - [ ] Drinking-zone splits, multi-operator cross-check
 
@@ -214,7 +235,9 @@ alone would not stop the public key reading every entrant's address.
 | `src/lib/raceImport.js` | Reading an imported start list into sign-ups for a shared race |
 | `src/lib/raceResults.js` | Fastest laps, top three per class, times for a records list |
 | `src/lib/shareImage.js` | The results picture for social media |
-| `src/lib/sync.js` | Supabase publish + public read/realtime (gated on write access) |
+| `src/lib/organiser.js` | Organiser login, creating shared races, my races |
+| `src/lib/eventFormat.js` | Event types (400 m to 5000 m, Beermile, Custom) and timing points |
+| `src/lib/recordsExport.js` | Sending results to a linked website's records list |
 | `src/pages/Home.jsx` | Event list / create |
 | `src/pages/Setup.jsx` | Start list + heats |
 | `src/pages/Timing.jsx` | The tap-timing tile grid (the heart) |
@@ -223,7 +246,7 @@ alone would not stop the public key reading every entrant's address.
 | `src/pages/Join.jsx` | Joining a shared race from a timing link (and the timer's name) |
 | `src/pages/RaceAdmin.jsx` | Race admin on the admin link: start list, heats, bibs, timers, results |
 | `test/` | Vitest suite: store, sync and links, heats, bibs, results, file parsing, time |
-| `supabase/schema.sql` | `tk_*` tables, RLS (public read, no anon write) |
+| `supabase/schema.sql` | The database for shared races: tables, link checks, Race admin, organisers, public results |
 
 ## Licence
 

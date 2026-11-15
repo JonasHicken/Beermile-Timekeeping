@@ -2,9 +2,9 @@
 // Local-first data store for Beermile Timekeeping.
 //
 // The browser is the source of truth DURING a race: every tap writes to
-// localStorage synchronously, so timing never depends on the network. Supabase
-// (see sync.js) is a downstream publisher for the public live page, not the
-// system of record.
+// localStorage synchronously, so timing never depends on the network. A shared
+// race also syncs with the server (online.js), which every phone timing it
+// shares; this phone's copy keeps working without signal.
 //
 // The crossings log is append-only and carries a `source` field
 // ('tap' | 'rfid' | 'manual'). That is the whole RFID-readiness story: an RFID
@@ -32,6 +32,7 @@
 // the list of names: a runner's `timer` is their own name or nothing.
 // ---------------------------------------------------------------------------
 
+import { formatOf, normalise, describe } from './eventFormat.js'
 import { useSyncExternalStore } from 'react'
 import { nowMs } from './time.js'
 
@@ -169,10 +170,12 @@ export const STATUSES = [
 export const statusOf = (r) => r?.status ?? 'ok'
 export const penaltyOf = (r) => r?.penaltyLaps ?? 0
 
-// A beer mile penalty lap (e.g. for vomiting) means this runner must complete
-// an extra lap, so their required count differs from the event default.
-export const requiredLaps = (event, runner) =>
-  (event?.numLaps ?? 4) + penaltyOf(runner)
+// A runner needs a tap at every timing point of the race (eventFormat.js).
+// In a beer mile a penalty lap (e.g. for vomiting) is one more on top.
+export const requiredLaps = (event, runner) => {
+  const f = formatOf(event)
+  return f.points.length + (f.penalties ? penaltyOf(runner) : 0)
+}
 
 // ---- selectors (pure) ------------------------------------------------------
 
@@ -312,12 +315,14 @@ export function standings(s, eventId) {
 
 // ---- mutations -------------------------------------------------------------
 
-export function createEvent({ name, date, numLaps = 4 }) {
+export function createEvent({ name, date, numLaps = 4, format = null }) {
+  const f = format ? normalise(format) : null
   const ev = {
     id: uid(),
-    name: name?.trim() || 'Beermile',
+    name: name?.trim() || (f ? describe(f).split(' · ')[0] : 'Beermile'),
     date: date || new Date().toISOString().slice(0, 10),
-    numLaps: Number(numLaps) || 4,
+    numLaps: f ? f.points.length : Number(numLaps) || 4,
+    ...(f ? { format: f } : {}),
     createdAt: nowMs(),
   }
   commit({ ...state, events: [...state.events, ev] })
@@ -828,7 +833,10 @@ function onlineFields(data) {
   // The names are the timers' codes. A phone that joined as a timer before
   // they were codes may still hold the list: a timer link never keeps it.
   if (data.rolle === 'timer') f.timers = []
-  if (data.rolle) f.timerToken = data.tidtakertoken ?? null
+  // Only in a full answer: a short one (nothing changed) leaves these out.
+  if (data.rolle && 'tidtakertoken' in data) f.timerToken = data.tidtakertoken ?? null
+  // Where results can be sent, set by a website the race is linked to (admin only).
+  if (data.event && 'eksport' in data.event) f.eksport = data.event.eksport ?? null
   return f
 }
 
@@ -865,6 +873,7 @@ export function adoptOnlineEvent(data, token) {
   const before = getEvent(state, id)?.online
   const ev = {
     id, name: data.event.name, date: data.event.date ?? '', numLaps: data.event.num_laps ?? 4,
+    ...serverFormat(data.event),
     createdAt: getEvent(state, id)?.createdAt ?? nowMs(),
     online: { token, me: before?.token === token ? before.me ?? null : null, ...onlineFields(data) },
   }
@@ -878,6 +887,12 @@ export function adoptOnlineEvent(data, token) {
 // wins there. Anything this phone changed and has not sent yet (still in the
 // outbox, with a stamp at least as new) keeps the local version: it is about
 // to be sent, and the server takes it if it is newer.
+// The format as the server keeps it; none (an older race) means a beer mile
+// with the server's lap count, so a stale local one must not linger.
+function serverFormat(ev) {
+  return { format: ev.oppsett?.points?.length ? normalise(ev.oppsett) : undefined }
+}
+
 export function mergeServer(eventId, data) {
   let changed = false
   if (!getEvent(state, eventId)) return
@@ -885,6 +900,7 @@ export function mergeServer(eventId, data) {
     if (e.id !== eventId || !data.event) return e
     const next = {
       ...e, name: data.event.name, date: data.event.date ?? '', numLaps: data.event.num_laps ?? 4,
+      ...serverFormat(data.event),
       online: { ...e.online, ...onlineFields(data) },
     }
     if (JSON.stringify(next) !== JSON.stringify(e)) { changed = true; return next }

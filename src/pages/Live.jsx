@@ -1,3 +1,4 @@
+import { formatOf, describe, progressLabel } from '../lib/eventFormat.js'
 import { useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useStore, standings, heatsInEvent } from '../lib/store.js'
@@ -93,7 +94,7 @@ export default function Live() {
 
       <h1 style={{ margin: 0, fontSize: 28 }}>{event.name}</h1>
       <div className="muted tiny" style={{ textTransform: 'uppercase', letterSpacing: '.08em', marginTop: 6, marginBottom: 16 }}>
-        {event.date} · {event.numLaps} {event.numLaps === 1 ? 'lap' : 'laps'} · {shownFinishers.length} finished
+        {event.date} · {describe(formatOf(event))} · {shownFinishers.length} finished
       </div>
 
       {heats.length > 1 && (
@@ -174,7 +175,7 @@ export default function Live() {
               <div className="item" key={r.runner.id}>
                 <span className="bib">{r.runner.bib}</span>
                 <span className="name grow">{r.runner.name}</span>
-                <span className="pill live">lap {r.lapsDone}/{r.requiredLaps}</span>
+                <span className="pill live">{progressLabel(formatOf(event), r)}</span>
               </div>
             ))}
           </div>

@@ -41,9 +41,9 @@ describe('records', () => {
       row('x', 'Veteran', [], { elapsed: 360000 }),
     ])
     expect(rows).toEqual([
-      { runner_id: 'k', sekunder: 401, runder: [] },
-      { runner_id: 's', sekunder: 200, runder: [100, 100] },
-      { runner_id: 'm', sekunder: 360, runder: [90, 90, 90, 90] },
+      { runner_id: 'k', navn: 'k', kategori: 'Kvinner', sekunder: 401, runder: [] },
+      { runner_id: 's', navn: 's', kategori: 'Stafett', sekunder: 200, runder: [100, 100] },
+      { runner_id: 'm', navn: 'm', kategori: 'Menn', sekunder: 360, runder: [90, 90, 90, 90] },
     ])
   })
 })

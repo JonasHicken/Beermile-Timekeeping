@@ -1,13 +1,14 @@
 import { useEffect, useState } from 'react'
-import NumberField from './NumberField.jsx'
+import EventFormatEditor from './EventFormatEditor.jsx'
+import { formatOf } from '../lib/eventFormat.js'
 
 // Race admin's "Race" card: the race itself, as the race website shows it.
 // Name and date reach the timing too; time and venue are on the race page.
 // Every change is saved at once and can be undone.
 //   call(fn, args)      -> the server's answer, or undefined after saying why not
 //   undoable(label, fn) -> offers Undo
-export default function RaceDetails({ event, runnerCount, busy, call, undoable, say, onLaps }) {
-  const [info, setInfo] = useState(null) // { tittel, dato, tid, sted, aapen, vis_resultater }
+export default function RaceDetails({ event, busy, call, undoable, onFormat }) {
+  const [info, setInfo] = useState(null) // { tittel, dato, tid, sted, vis_resultater, koblet }
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
@@ -34,19 +35,12 @@ export default function RaceDetails({ event, runnerCount, busy, call, undoable, 
     return true
   }
 
-  async function fetchSignups() {
-    const before = runnerCount
-    const res = await call('tk_admin_hent_paameldinger', {})
-    if (res === undefined) return
-    const added = (res.antall ?? 0) - before
-    say(added > 0 ? `${added} new from the sign-ups.` : 'The start list already has every sign-up.')
-  }
 
   if (failed && !info) {
     return (
       <div className="card stack" style={{ marginTop: 14, gap: 8 }}>
         <div className="muted">The race’s details could not be loaded.</div>
-        <LapsRow event={event} onLaps={onLaps} />
+        <EventRow event={event} busy={busy} onFormat={onFormat} />
       </div>
     )
   }
@@ -57,42 +51,38 @@ export default function RaceDetails({ event, runnerCount, busy, call, undoable, 
         <>
           <TextRow label="Name" value={info.tittel} max={120} busy={busy} required
             onSave={(v) => save({ tittel: v }, `Name: ${v}`)} />
-          <div className="row" style={{ gap: 10, alignItems: 'flex-end' }}>
-            <label className="stack grow" style={{ gap: 4, minWidth: 0 }}>
-              <span className="label">Date</span>
-              <input type="date" value={info.dato ?? ''} disabled={busy}
-                onChange={(e) => save({ dato: e.target.value || null }, `Date: ${e.target.value || 'none'}`)} />
-            </label>
-            <LapsRow event={event} onLaps={onLaps} />
-          </div>
+          <label className="stack" style={{ gap: 4 }}>
+            <span className="label">Date</span>
+            <input type="date" value={info.dato ?? ''} disabled={busy}
+              onChange={(e) => save({ dato: e.target.value || null }, `Date: ${e.target.value || 'none'}`)} />
+          </label>
+          <EventRow event={event} busy={busy} onFormat={onFormat} />
           <TextRow label="Start time" value={info.tid} max={60} busy={busy} placeholder="18:00, or meet at 17:30"
             onSave={(v) => save({ tid: v }, `Start time: ${v || 'none'}`)} />
           <TextRow label="Venue" value={info.sted} max={160} busy={busy}
             onSave={(v) => save({ sted: v }, `Venue: ${v || 'none'}`)} />
 
-          <Switch on={info.aapen} busy={busy} label="Sign-up open"
-            hint={info.aapen ? 'People can still sign up on the race page.' : 'The sign-up form is closed.'}
-            onChange={(v) => save({ aapen: v }, v ? 'Sign-up opened' : 'Sign-up closed')} />
           <Switch on={info.vis_resultater} busy={busy} label="Results on the race page"
-            hint={info.vis_resultater ? 'Everyone with the race link sees the live results.' : 'Hidden: only the timing phones see them.'}
+            hint={info.vis_resultater ? 'Anyone with the results link sees them live.' : 'Hidden: only the timing phones see them.'}
             onChange={(v) => save({ vis_resultater: v }, v ? 'Results shown' : 'Results hidden')} />
 
-          <div className="row" style={{ gap: 10 }}>
-            <div className="grow muted tiny">New sign-ups on the race page are not in the start list until you fetch them.</div>
-            <button className="btn sm" disabled={busy} onClick={fetchSignups}>Fetch new sign-ups</button>
-          </div>
+          {info.koblet && (
+            <div className="muted tiny">
+              Linked to {info.koblet}: its sign-ups come in from there, and the Results tab can send the times back.
+            </div>
+          )}
         </>
       )}
     </div>
   )
 }
 
-function LapsRow({ event, onLaps }) {
+function EventRow({ event, busy, onFormat }) {
   return (
-    <label className="stack" style={{ gap: 4, width: 80, flex: 'none' }}>
-      <span className="label">Laps</span>
-      <NumberField value={event.numLaps ?? 4} min={1} max={20} onCommit={onLaps} label="Laps" />
-    </label>
+    <div className="stack" style={{ gap: 4 }}>
+      <span className="label">Event</span>
+      <EventFormatEditor value={formatOf(event)} busy={busy} onSave={onFormat} />
+    </div>
   )
 }
 

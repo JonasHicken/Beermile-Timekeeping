@@ -11,7 +11,9 @@
 // Laps are fetched as "changed since rev N". Two phones' writes can commit in
 // a different order from the revs they were given, so each fetch looks back a
 // little, and every 30 seconds the phone fetches the whole log to be sure.
-// The schema side is PART 18 of the main site's supabase/schema.sql.
+// The start list and heats come only when they changed (the server's
+// `versjon`), which keeps a race's traffic small. The server side is
+// supabase/schema.sql in this repo.
 // ---------------------------------------------------------------------------
 
 import { useEffect, useSyncExternalStore } from 'react'
@@ -27,6 +29,12 @@ const LOOKBACK = 200
 
 const revs = {} // eventId -> highest crossing rev seen
 const lastFull = {}
+const versions = {} // eventId -> the start list's version this phone has
+const FULL_LIST_EVERY_MS = 5 * 60 * 1000 // the start list in full now and then, to be sure
+const lastList = {}
+function noteVersion(eventId, data) {
+  if (data?.versjon != null && data.runners) { versions[eventId] = data.versjon; lastList[eventId] = Date.now() }
+}
 
 // ---- status, for the little sync indicator ---------------------------------
 
@@ -87,6 +95,7 @@ export async function joinWithLink(eventId, token, name = null) {
   if (!data?.event) throw new Error('not-found')
   revs[eventId] = maxRev(data.crossings, 0)
   lastFull[eventId] = Date.now()
+  noteVersion(eventId, data)
   const ev = adoptOnlineEvent(data, token)
   // In: a screen still asking for the name can let go now, not at the next sync.
   setStatus(eventId, { ok: true, at: Date.now(), error: null, denied: false, needName: null })
@@ -124,9 +133,14 @@ async function syncOnce(eventId) {
 
   const full = !revs[eventId] || Date.now() - (lastFull[eventId] ?? 0) > FULL_EVERY_MS
   const since = full ? 0 : Math.max(0, revs[eventId] - LOOKBACK)
-  const data = await rpc('tk_hent', { p_event: eventId, p_token: token, p_siden: since, p_tidtaker: ev.online.me ?? null })
+  const listDue = Date.now() - (lastList[eventId] ?? 0) > FULL_LIST_EVERY_MS
+  const data = await rpc('tk_hent', {
+    p_event: eventId, p_token: token, p_siden: since, p_tidtaker: ev.online.me ?? null,
+    p_versjon: listDue ? 0 : versions[eventId] ?? 0,
+  })
   if (full) lastFull[eventId] = Date.now()
   revs[eventId] = maxRev(data.crossings, revs[eventId] ?? 0)
+  noteVersion(eventId, data)
   mergeServer(eventId, data)
 }
 
@@ -142,10 +156,10 @@ export function saveTimers(eventId, { names = null, assignment = [] }) {
   })
 }
 
-// One of the admin link's race-day calls (tk_admin_* in PART 18): heats, late
-// runners, bibs, timers. The server checks the admin token and does the work
-// in the same functions the site uses; then the whole event is fetched, so the
-// change shows here straight away (and on the other phones within seconds).
+// One of the admin link's race-day calls (tk_admin_*): heats, late runners,
+// bibs, timers. The server checks the admin token; then the whole event is
+// fetched, so the change shows here straight away (and on the other phones
+// within seconds).
 // Returns what the call returned. Needs a signal.
 export async function adminCall(eventId, fn, args) {
   const ev = getEvent(getState(), eventId)
@@ -163,9 +177,10 @@ export async function adminCall(eventId, fn, args) {
 
 async function refresh(eventId) {
   const ev = getEvent(getState(), eventId)
-  const data = await rpc('tk_hent', { p_event: eventId, p_token: ev.online.token, p_siden: 0 })
+  const data = await rpc('tk_hent', { p_event: eventId, p_token: ev.online.token, p_siden: 0, p_versjon: 0 })
   lastFull[eventId] = Date.now()
   revs[eventId] = maxRev(data.crossings, revs[eventId] ?? 0)
+  noteVersion(eventId, data)
   mergeServer(eventId, data)
 }
 

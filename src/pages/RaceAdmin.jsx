@@ -11,7 +11,7 @@ import SyncBadge from '../components/SyncBadge.jsx'
 import RaceResults from '../components/RaceResults.jsx'
 import TimerAutoAssign from '../components/TimerAutoAssign.jsx'
 import RaceImport from '../components/RaceImport.jsx'
-import { ordinal } from '../components/NumberField.jsx'
+import { formatOf, describe, formatChangeWarning } from '../lib/eventFormat.js'
 import RaceDetails from '../components/RaceDetails.jsx'
 
 // Race day for a shared race, on the admin link: late runners, heats, bibs and
@@ -235,31 +235,26 @@ export default function RaceAdmin() {
     })
   }
 
-  // ---- laps ----
-  // Every result is worked out from the lap count, so once laps are recorded
-  // a change moves every result at once: it asks first, and can be undone.
-  function changeLaps(n) {
-    const was = event.numLaps
-    if (n === was) return true
-    const apply = async () => {
-      if (await call('tk_admin_sett_runder', { p_runder: n }) === undefined) return
-      undoable(`Laps: ${was} → ${n}`, () => call('tk_admin_sett_runder', { p_runder: was }))
+  // ---- the event: what is timed, and where ----
+  // Every result is worked out from the timing points, so once laps are
+  // recorded a change in how many there are moves every result: it asks
+  // first. Every change can be undone.
+  function changeFormat(f) {
+    const was = formatOf(event)
+    const save = async () => {
+      if (await call('tk_admin_sett_format', { p_oppsett: f }) === undefined) return false
+      undoable(`Event: ${describe(f)}`, () => call('tk_admin_sett_format', { p_oppsett: was }))
+      return true
     }
     const timed = getState().crossings.some((c) => c.eventId === eventId && !c.void)
-    if (!timed) { apply(); return true }
-    const finished = standings(getState(), eventId).finishers.length
+    if (!timed || f.points.length === was.points.length) return save()
     askConfirm({
-      title: `Change to ${plural(n, 'lap')}?`,
-      body:
-        'Laps are already recorded. Every result is worked out from the lap count, so ' +
-        (n > was
-          ? `runners who finished ${plural(was, 'lap')} count as still on course until a ${ordinal(n)} lap is recorded` +
-            (finished ? ` (${plural(finished, 'runner')} finished right now).` : '.')
-          : `runners finish after ${plural(n, 'lap')}, and their time becomes their ${ordinal(n)} lap; later laps no longer count.`) +
-        ' Every phone and the race page change with it. Penalty laps still come on top.',
-      confirmLabel: `Change to ${n}`,
+      title: `Change to ${plural(f.points.length, 'timing point')}?`,
+      body: formatChangeWarning(was.points.length, f.points.length, standings(getState(), eventId).finishers.length) +
+        ' Every phone and the race page change with it.',
+      confirmLabel: 'Change',
       danger: true,
-      onConfirm: apply,
+      onConfirm: save,
     })
     return false
   }
@@ -268,15 +263,15 @@ export default function RaceAdmin() {
   async function rename(r, to) {
     const from = r.name
     if (!to || to === from) return true
-    if (await call('tk_admin_rett_resultat', { p_runner_id: r.id, p_navn: to }) === undefined) return false
-    undoable(`Name: ${to}`, () => call('tk_admin_rett_resultat', { p_runner_id: r.id, p_navn: from }))
+    if (await call('tk_admin_rett_loper', { p_runner_id: r.id, p_navn: to }) === undefined) return false
+    undoable(`Name: ${to}`, () => call('tk_admin_rett_loper', { p_runner_id: r.id, p_navn: from }))
     return true
   }
   async function reclass(r, kjonn) {
     const from = r.category === 'Kvinner' ? 'kvinne' : 'mann'
     if (kjonn === from) return true
-    if (await call('tk_admin_sett_klasse', { p_runner_id: r.id, p_kjonn: kjonn }) === undefined) return false
-    undoable(`${r.name}: ${kjonn === 'kvinne' ? 'Women' : 'Men'}`, () => call('tk_admin_sett_klasse', { p_runner_id: r.id, p_kjonn: from }))
+    if (await call('tk_admin_rett_loper', { p_runner_id: r.id, p_kjonn: kjonn }) === undefined) return false
+    undoable(`${r.name}: ${kjonn === 'kvinne' ? 'Women' : 'Men'}`, () => call('tk_admin_rett_loper', { p_runner_id: r.id, p_kjonn: from }))
     return true
   }
 
@@ -383,7 +378,7 @@ export default function RaceAdmin() {
           ))}
         </div>
         <h2 className="admin-h">Race</h2>
-        <RaceDetails event={event} runnerCount={runners.length} busy={busy} call={call} undoable={undoable} say={say} onLaps={changeLaps} />
+        <RaceDetails event={event} busy={busy} call={call} undoable={undoable} onFormat={changeFormat} />
       </>}
 
       {/* ---- Race: the start list, names, bibs and heats ---- */}

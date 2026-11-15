@@ -1,3 +1,4 @@
+import { formatOf } from '../lib/eventFormat.js'
 import { useEffect, useState } from 'react'
 import {
   useStore, runnerResult, getEvent, getHeat, getRunner,
@@ -65,8 +66,8 @@ export default function RunnerSheet({ eventId, heatId, runnerId, onClose, offerU
           </div>
         </div>
 
-        {/* penalty laps */}
-        <div style={{ marginTop: 16 }}>
+        {/* penalty laps: a beer mile's, not a track race's */}
+        {formatOf(event).penalties && <div style={{ marginTop: 16 }}>
           <span className="label">Penalty laps</span>
           <div className="row">
             <button className="btn" onClick={() => setPenaltyLaps(runner.id, penalty - 1)} disabled={penalty === 0}>−</button>
@@ -78,7 +79,7 @@ export default function RunnerSheet({ eventId, heatId, runnerId, onClose, offerU
             </div>
             <button className="btn" onClick={() => setPenaltyLaps(runner.id, penalty + 1)}>+</button>
           </div>
-        </div>
+        </div>}
 
         {/* laps */}
         <div style={{ marginTop: 18 }}>

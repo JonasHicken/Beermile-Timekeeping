@@ -1,6 +1,7 @@
+import { formatOf, splitLabel } from '../lib/eventFormat.js'
 import { useEffect, useState } from 'react'
 import { useStore, standings, heatsInEvent } from '../lib/store.js'
-import { adminCall, NotAdminError } from '../lib/online.js'
+import { sendToRecords } from '../lib/recordsExport.js'
 import { fmt } from '../lib/time.js'
 import { classesIn, fastestLaps, podiums, recordRows } from '../lib/raceResults.js'
 import { drawResults, sharePicture } from '../lib/shareImage.js'
@@ -29,6 +30,8 @@ export default function RaceResults({ event, askConfirm, offerUndo }) {
   const pods = podiums(st.finishers)
   const open = heats.filter((h) => h.status !== 'done').length
   const toRecords = recordRows(st.finishers)
+  // Set by a website the race is linked to; without one there is nowhere to send.
+  const eksport = event.online?.eksport ?? null
 
   async function makePicture(withMascot = mascot) {
     setBusy(true); setNote(null)
@@ -44,23 +47,28 @@ export default function RaceResults({ event, askConfirm, offerUndo }) {
     if (how === 'downloaded') setNote({ text: 'Saved as resultater.png. Post it from your photos.' })
   }
 
-  function sendToRecords() {
+  function askSend() {
     askConfirm({
-      title: `Send ${plural(toRecords.length, 'time')} to the records list?`,
+      title: `Send ${plural(toRecords.length, 'time')} to ${eksport?.navn ?? 'the records list'}?`,
       body:
-        'Women’s, men’s and relay finishing times go to the race website’s approval queue, rounded up to whole seconds, with each lap’s time. ' +
+        'Women’s, men’s and relay finishing times go to the website’s approval queue, rounded up to whole seconds, with each split. ' +
         'Nothing is public until you approve each one there, so check that the runners are happy to be listed. ' +
-        'A runner already sent is not added twice; sending again fills in their lap times.',
+        'A runner already sent is not added twice; sending again updates their time while it waits.',
       confirmLabel: 'Send',
       onConfirm: async () => {
         setBusy(true); setNote(null)
         try {
-          const res = await adminCall(event.id, 'tk_admin_eksporter_resultater', { p_rader: toRecords })
-          const sent = res?.sendt ?? 0
-          const before = res?.oppdatert ?? toRecords.length - sent
-          setNote({ text: `${plural(sent, 'time')} sent to the approval queue${before ? `; ${before} sent before, lap times filled in` : ''}.` })
+          const res = await sendToRecords(eksport, toRecords)
+          const sent = res.sendt ?? 0
+          const before = res.oppdatert ?? 0
+          const approved = res.godkjent ?? 0
+          setNote({ text: [
+            `${plural(sent, 'time')} sent to the approval queue.`,
+            before ? `${before} sent before, updated.` : '',
+            approved ? `${approved} already approved, left as they are: change those on ${eksport.navn ?? 'the website'}.` : '',
+          ].filter(Boolean).join(' ') })
         } catch (e) {
-          setNote({ text: e instanceof NotAdminError ? 'Only the admin link can do this.' : `Not sent: ${e.message}`, error: true })
+          setNote({ text: `Not sent: ${e.message}`, error: true })
         } finally { setBusy(false) }
       },
     })
@@ -102,13 +110,13 @@ export default function RaceResults({ event, askConfirm, offerUndo }) {
                 <span style={{ width: 44, fontWeight: 700 }}>{x.runner.bib}</span>
                 <span className="grow" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {x.runner.name}
-                  <span className="muted tiny"> · lap {x.lap}{x.status !== 'ok' ? ` · ${x.status.toUpperCase()}` : ''}</span>
+                  <span className="muted tiny"> · {splitLabel(formatOf(event), x.lap - 1)}{x.status !== 'ok' ? ` · ${x.status.toUpperCase()}` : ''}</span>
                 </span>
                 <span className="display" style={{ fontSize: 20 }}>{fmt(x.ms)}</span>
               </div>
             ))}
           </div>
-          <div className="muted tiny">Each runner’s fastest lap. Lap 1 is from the start.</div>
+          <div className="muted tiny">Each runner’s fastest split. The first is from the start.</div>
         </>
       )}
 
@@ -141,15 +149,17 @@ export default function RaceResults({ event, askConfirm, offerUndo }) {
         </div>
       )}
 
-      <h2 className="admin-h">Records list</h2>
-      <div className="card stack" style={{ gap: 10 }}>
-        <div className="muted" style={{ fontSize: 15 }}>
-          Send the women’s and men’s times to the race website’s records list. They wait in its approval queue until you approve them.
+      {eksport && <>
+        <h2 className="admin-h">Records list</h2>
+        <div className="card stack" style={{ gap: 10 }}>
+          <div className="muted" style={{ fontSize: 15 }}>
+            Send the women’s, men’s and relay times to {eksport.navn ?? 'the linked website'}’s records list. They wait in its approval queue until they are approved there.
+          </div>
+          <button className="btn" disabled={busy || toRecords.length === 0} onClick={askSend}>
+            {toRecords.length ? `Send ${plural(toRecords.length, 'time')}` : 'No finishing times to send yet'}
+          </button>
         </div>
-        <button className="btn" disabled={busy || toRecords.length === 0} onClick={sendToRecords}>
-          {toRecords.length ? `Send ${plural(toRecords.length, 'time')}` : 'No finishing times to send yet'}
-        </button>
-      </div>
+      </>}
 
       {note && <div className={note.error ? 'form-error' : 'muted tiny'} role="status">{note.text}</div>}
     </div>

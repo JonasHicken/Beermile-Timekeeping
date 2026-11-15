@@ -1,3 +1,4 @@
+import { sendToRecords } from '../lib/recordsExport.js'
 import { useState } from 'react'
 import { getState, standings, setCrossingTime } from '../lib/store.js'
 import { adminCall } from '../lib/online.js'
@@ -13,15 +14,15 @@ const OUT = { dnf: 'DNF', dns: 'DNS', dq: 'DQ' }
 //   name  -> the sign-up and start list (tk_admin_rett_resultat)
 //   bib   -> the sign-up and start list (tk_admin_sett_startnummer, swaps)
 //   time  -> moves the runner's finishing tap, like Review; it syncs as a lap
-// A result already sent to the records list is corrected there too while it
-// waits for approval; an approved record is public and is changed on the site.
+// A result already sent to a linked website's records list is corrected there
+// too while it waits for approval; an approved one is changed on the site.
 export default function ResultCorrections({ event, finishers, out, askConfirm, offerUndo }) {
   const [open, setOpen] = useState(null) // runner id being edited
   const [note, setNote] = useState(null) // { text, error }
 
   const say = (text, error = false) => setNote({ text, error })
-  const recordNote = (res) => (res?.rekord === 'godkjent'
-    ? ' This result is already approved on the records list: change it there too, on the race website.'
+  const recordNote = (res) => (res?.godkjent
+    ? ` This result is already approved on ${event.online?.eksport?.navn ?? 'the records list'}: change it there too.`
     : '')
   // Resolves to the server's answer, or null after saying what went wrong.
   async function server(fn, args) {
@@ -39,10 +40,13 @@ export default function ResultCorrections({ event, finishers, out, askConfirm, o
       confirmLabel: 'Change name',
       danger: true,
       onConfirm: async () => {
-        const res = await server('tk_admin_rett_resultat', { p_runner_id: row.runner.id, p_navn: to })
-        if (res === null) return
+        if (await server('tk_admin_rett_loper', { p_runner_id: row.runner.id, p_navn: to }) === null) return
+        const res = await syncRecord(row.runner.id)
         say(`Name changed.${recordNote(res)}`)
-        offerUndo(`Name: ${to}`, () => server('tk_admin_rett_resultat', { p_runner_id: row.runner.id, p_navn: from }))
+        offerUndo(`Name: ${to}`, async () => {
+          await server('tk_admin_rett_loper', { p_runner_id: row.runner.id, p_navn: from })
+          await syncRecord(row.runner.id)
+        })
       },
     })
   }
@@ -90,7 +94,7 @@ export default function ResultCorrections({ event, finishers, out, askConfirm, o
     // The same time again: nothing to move, but the records list's copy is
     // sent once more (what to do when it could not be updated last time).
     if (ms === row.elapsed) {
-      syncRecord(row.runner.id).then((res) => { if (res?.rekord) say(`Records list up to date.${recordNote(res)}`) })
+      syncRecord(row.runner.id).then((res) => { if (res) say(`Records list up to date.${recordNote(res)}`) })
       return undefined
     }
     const oldAt = finish.at
@@ -104,20 +108,23 @@ export default function ResultCorrections({ event, finishers, out, askConfirm, o
         // next sync; only the records list's copy needs the server right now.
         setCrossingTime(finish.id, start + ms)
         const res = await syncRecord(row.runner.id)
-        if (res === null) say('Time changed in the results, but the records list could not be updated. Check the signal and save the time again.', true)
-        else say(`Time changed.${recordNote(res)}`)
+        if (res !== null) say(`Time changed.${recordNote(res)}`)
         offerUndo(`Time: ${fmt(ms)}`, async () => { setCrossingTime(finish.id, oldAt); await syncRecord(row.runner.id) })
       },
     })
     return undefined
   }
 
-  // The records list's copy of the time and laps, from the results as they now are.
-  function syncRecord(runnerId) {
+  // The linked website's copy of the result, from the results as they now are
+  // (only if the race is linked, and the site keeps only what it already has:
+  // a runner never sent is not sent by a correction).
+  async function syncRecord(runnerId) {
+    const eksport = event.online?.eksport
     const now = standings(getState(), event.id).finishers.find((r) => r.runner.id === runnerId)
     const rec = now && recordRows([now])[0]
-    if (!rec) return Promise.resolve(undefined)
-    return server('tk_admin_rett_resultat', { p_runner_id: runnerId, p_sekunder: rec.sekunder, p_runder: rec.runder })
+    if (!eksport || !rec) return undefined
+    try { return await sendToRecords(eksport, [{ ...rec, bare_oppdater: true }]) }
+    catch (e) { say(`Changed here, but ${eksport.navn ?? 'the records list'} could not be updated: ${e.message}`, true); return null }
   }
 
   const rowView = (row, place) => {

@@ -6,6 +6,11 @@ import {
 } from '../lib/store.js'
 import { useConfirm } from '../components/Confirm.jsx'
 import { useUndo } from '../components/Undo.jsx'
+import EventFormatEditor from '../components/EventFormatEditor.jsx'
+import HelpBox from '../components/HelpBox.jsx'
+import OrganiserPanel from '../components/OrganiserPanel.jsx'
+import { useOrganiser, createSharedRace } from '../lib/organiser.js'
+import { presetFormat, formatOf, describe } from '../lib/eventFormat.js'
 
 export default function Home() {
   const events = useStore((s) => listEvents(s))
@@ -14,12 +19,27 @@ export default function Home() {
   const [confirmNode, askConfirm] = useConfirm()
   const [undoNode, offerUndo] = useUndo()
   const [name, setName] = useState('')
-  const [laps, setLaps] = useState(4)
+  const [format, setFormat] = useState(() => presetFormat('beermile'))
+  const [date, setDate] = useState(() => new Date().toISOString().slice(0, 10))
+  const user = useOrganiser()
+  const [shared, setShared] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
 
-  function create(e) {
+  async function create(e) {
     e.preventDefault()
-    const ev = createEvent({ name, numLaps: laps })
-    nav(`/event/${ev.id}/setup`)
+    if (!shared) {
+      const ev = createEvent({ name, date, format })
+      nav(`/event/${ev.id}/setup`)
+      return
+    }
+    // A shared race is made on the server, then opened here as its admin.
+    setBusy(true); setError('')
+    try {
+      const ev = await createSharedRace({ name: name.trim() || 'Race', date, format })
+      nav(`/event/${ev.id}/admin`)
+    } catch (err) { setError(err.message) }
+    finally { setBusy(false) }
   }
 
   return (
@@ -28,10 +48,6 @@ export default function Home() {
         <img className="mark" src="/logo.png" alt="" width="60" height="56" />
         <div>
           <h1>Beermile <span className="accent">Timekeeping</span></h1>
-          {/* Each phrase stays whole; on a phone the line wrapped inside "RFID-ready". */}
-          <div className="sub">
-            <span className="nowrap">Tap timing</span> · <span className="nowrap">Live results</span> · <span className="nowrap">RFID-ready</span>
-          </div>
         </div>
       </div>
 
@@ -49,25 +65,39 @@ export default function Home() {
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="NM i Ølmila 2027"
+              placeholder="Club championship 2027"
             />
           </div>
           <div>
-            <label className="label">Laps</label>
-            <input
-              type="number" min="1" max="20" inputMode="numeric"
-              value={laps}
-              onChange={(e) => setLaps(e.target.value)}
-            />
+            <label className="label">Date</label>
+            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
           </div>
+          <div>
+            <label className="label">Event</label>
+            <EventFormatEditor value={format} onSave={setFormat} compact />
+          </div>
+          {user && (
+            <label className="row" style={{ gap: 10 }}>
+              <input type="checkbox" checked={shared} onChange={(e) => setShared(e.target.checked)}
+                style={{ width: 20, height: 20, flex: 'none', margin: 0, accentColor: 'var(--amber)' }} />
+              <span className="grow">
+                Shared race
+                <span className="muted tiny" style={{ display: 'block' }}>Timed by several phones: you get an admin link, and a timer link to send to helpers.</span>
+              </span>
+            </label>
+          )}
+          {error && <div className="form-error">{error}</div>}
           <div className="row">
             <button type="button" className="btn ghost grow" onClick={() => setCreating(false)}>
               Cancel
             </button>
-            <button type="submit" className="btn primary grow">Create</button>
+            <button type="submit" className="btn primary grow" disabled={busy}>{busy ? 'Creating…' : 'Create'}</button>
           </div>
         </form>
       )}
+
+      <OrganiserPanel />
+      <HelpBox />
 
       <div style={{ height: 20 }} />
 
@@ -117,7 +147,7 @@ function EventRow({ ev, onOpen, onLive, onHeat, onDelete }) {
             {ev.name} {ev.online && <span className="pill live" style={{ verticalAlign: 3 }}>Shared</span>}
           </div>
           <div className="ev-meta">
-            {ev.date} · {ev.numLaps} {ev.numLaps === 1 ? 'lap' : 'laps'} · {runners} runners · {heats} {heats === 1 ? 'heat' : 'heats'}
+            {ev.date} · {describe(formatOf(ev))} · {runners} runners · {heats} {heats === 1 ? 'heat' : 'heats'}
           </div>
           {running && <div className="running-note">● {running.name} is running</div>}
         </div>
