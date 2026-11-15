@@ -201,7 +201,9 @@ export default function Timing() {
       <div className="topbar">
         {timer
           ? <span className="muted tiny">{event.online.me ? `Timing as ${event.online.me}` : 'Timer'}</span>
-          : <Link to={`/event/${eventId}/setup`} className="backlink">← Setup</Link>}
+          : roleOf(event) === 'admin'
+            ? <Link to={`/event/${eventId}/admin?tab=live`} className="backlink">← Race admin</Link>
+            : <Link to={`/event/${eventId}/setup`} className="backlink">← Setup</Link>}
         <div className="spacer" />
         {online && <SyncBadge eventId={eventId} />}
         <button className="btn ghost" onClick={() => nav(`/event/${eventId}/heat/${heatId}/review`)}>Review</button>

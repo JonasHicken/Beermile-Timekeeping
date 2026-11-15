@@ -948,3 +948,11 @@ input:focus, select:focus, textarea:focus {
   text-decoration: underline dotted var(--muted); text-underline-offset: 4px;
 }
 .runner-name:disabled { cursor: default; }
+
+/* Race admin's five tabs fit one row on a phone. */
+.admin-tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.admin-tabs::-webkit-scrollbar { display: none; }
+.admin-tabs { gap: 4px; }
+.admin-tabs .chip { flex: 1 1 0; min-width: 0; justify-content: center; padding-left: 4px; padding-right: 4px; font-size: 13px; }
+/* A heat in the Live tab: the whole row opens it. */
+.live-heat { width: 100%; background: none; border-left: 0; border-right: 0; border-top: 0; color: inherit; font: inherit; cursor: pointer; gap: 10px; }
