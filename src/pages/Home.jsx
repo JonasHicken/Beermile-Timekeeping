@@ -45,7 +45,8 @@ export default function Home() {
   return (
     <div className="app">
       <div className="topbar">
-        <img className="mark" src="/logo.png" alt="" width="60" height="56" />
+        {/* The logo without its white sticker outline (logo-plain.png), on the dark page. */}
+        <img className="mark" src="/logo-plain.png" alt="" width="60" height="56" />
         <div>
           <h1>Beermile <span className="accent">Timekeeping</span></h1>
         </div>

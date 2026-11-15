@@ -968,6 +968,3 @@ input:focus, select:focus, textarea:focus {
 .help-body p { margin: 0 0 6px; }
 .help-body ol, .help-body ul { margin: 0 0 6px; padding-left: 20px; }
 .help-body li { margin-bottom: 4px; }
-
-/* The logo on the home page, toned down so it does not outshine the page. */
-.topbar img.mark { filter: brightness(0.82) saturate(0.85); }

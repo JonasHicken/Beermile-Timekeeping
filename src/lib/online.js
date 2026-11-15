@@ -184,6 +184,13 @@ async function refresh(eventId) {
   mergeServer(eventId, data)
 }
 
+// The admin link itself: for the organiser's other phones, or for linking a
+// website to the race. Only an admin phone has it.
+export function adminLink(event) {
+  const t = event?.online?.role === 'admin' ? event.online.token : null
+  return t ? `${window.location.origin}/join/${event.id}#${t}` : null
+}
+
 // The link to send to the timers, for the admin.
 export function timerLink(event) {
   const t = event?.online?.timerToken

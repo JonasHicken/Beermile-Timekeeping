@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import EventFormatEditor from './EventFormatEditor.jsx'
 import { formatOf } from '../lib/eventFormat.js'
+import { adminLink } from '../lib/online.js'
 
 // Race admin's "Race" card: the race itself, as the race website shows it.
 // Name and date reach the timing too; time and venue are on the race page.
@@ -66,6 +67,7 @@ export default function RaceDetails({ event, busy, call, undoable, onFormat }) {
             hint={info.vis_resultater ? 'Anyone with the results link sees them live.' : 'Hidden: only the timing phones see them.'}
             onChange={(v) => save({ vis_resultater: v }, v ? 'Results shown' : 'Results hidden')} />
 
+          <AdminLinkRow event={event} />
           {info.koblet && (
             <div className="muted tiny">
               Linked to {info.koblet}: its sign-ups come in from there, and the Results tab can send the times back.
@@ -115,5 +117,34 @@ function Switch({ on, busy, label, hint, onChange }) {
         <span className="muted tiny" style={{ display: 'block' }}>{hint}</span>
       </span>
     </label>
+  )
+}
+
+// The admin link, to open the race as admin on another phone or to link a
+// website to it. It gives full control of the race, so it is behind a button.
+function AdminLinkRow({ event }) {
+  const [shown, setShown] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const link = adminLink(event)
+  if (!link) return null
+  async function copy() {
+    try { await navigator.clipboard.writeText(link); setCopied(true); setTimeout(() => setCopied(false), 2500) }
+    catch { window.prompt('Copy the admin link:', link) }
+  }
+  return (
+    <div className="stack" style={{ gap: 4 }}>
+      <span className="label">Admin link</span>
+      {shown ? (
+        <div className="row" style={{ gap: 8 }}>
+          <code className="grow" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13 }}>{link}</code>
+          <button className="btn sm" onClick={copy}>{copied ? 'Copied' : 'Copy'}</button>
+        </div>
+      ) : (
+        <button className="btn ghost sm" style={{ alignSelf: 'flex-start' }} onClick={() => setShown(true)}>Show admin link</button>
+      )}
+      <div className="muted tiny">
+        Full control of the race: for your own other phones, or to link a website (paste it there). Never send it to timers; they get the timer link.
+      </div>
+    </div>
   )
 }
