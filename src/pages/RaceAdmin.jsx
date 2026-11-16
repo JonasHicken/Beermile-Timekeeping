@@ -560,7 +560,7 @@ function RunnerEdit({ runner, busy, onSave, onClose }) {
           </select>
         )}
       </div>
-      {relay && <div className="muted tiny">A relay team is written “Team (Runner og Runner)”.</div>}
+      {relay && <div className="muted tiny">{t('A relay team is written “Team (Runner og Runner)”.')}</div>}
       <div className="row" style={{ gap: 8 }}>
         <button className="btn ghost grow" onClick={onClose}>{t('Cancel')}</button>
         <button className="btn primary grow" disabled={busy || !n} onClick={() => onSave(n, relay ? null : kjonn)}>{t('Save')}</button>

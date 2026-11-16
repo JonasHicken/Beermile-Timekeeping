@@ -45,7 +45,7 @@ export default function Live() {
 
   // Results as rows: header first, finishers, then non-finishers.
   function resultRows() {
-    const rows = [['Place', 'Bib', 'Name', 'Club', 'Category', 'Heat', 'Status', 'Time', 'Penalty laps', 'Splits']]
+    const rows = [['Place', 'Bib', 'Name', 'Club', 'Category', 'Heat', 'Status', 'Time', 'Penalty laps', 'Splits'].map((h) => t(h))]
     for (const r of shownFinishers) {
       rows.push([
         r.shownRank, r.runner.bib, r.runner.name, r.runner.club, r.runner.category,

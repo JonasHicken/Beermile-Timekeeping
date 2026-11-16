@@ -12,7 +12,7 @@ import { useState, useEffect } from 'react'
 export function ConfirmDialog({
   title,
   body,
-  confirmLabel = 'Confirm',
+  confirmLabel = t('Confirm'),
   danger = false,
   onConfirm,
   onClose,

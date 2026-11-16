@@ -8,7 +8,7 @@ import { useState } from 'react'
 // Norwegian keypad shows is accepted too).
 //
 // onSubmit(ms) may return an error string to show; anything else clears it.
-export default function TimeInput({ initialMs = null, submitLabel = 'Set', onSubmit }) {
+export default function TimeInput({ initialMs = null, submitLabel = t('Set'), onSubmit }) {
   const [mins, setMins] = useState(initialMs != null ? String(Math.floor(initialMs / 60000)) : '')
   const [secs, setSecs] = useState(initialMs != null ? secsText(initialMs) : '')
   const [error, setError] = useState('')

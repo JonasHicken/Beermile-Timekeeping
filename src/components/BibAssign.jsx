@@ -64,7 +64,7 @@ export default function BibAssign({ eventId, runners, onApply, onClose }) {
       <label style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
         <input type="checkbox" checked={tens} onChange={(e) => setTens(e.target.checked)}
           style={{ width: 20, height: 20, flex: 'none', margin: 0, accentColor: 'var(--amber)' }} />
-        <span>Start each class on a new ten (1–17, then 20…)</span>
+        <span>{t('Start each class on a new ten (1–17, then 20…)')}</span>
       </label>
 
       <div className="stack" style={{ gap: 6 }}>

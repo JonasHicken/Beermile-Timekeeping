@@ -2,6 +2,25 @@
 // test/i18n.test.js fails when a text is missing here or a {placeholder}
 // differs. Words used by plural() come in pairs: 'runner' and 'runners'.
 export default {
+  // ---- found by a scan for text outside t() ----
+  '"{part}" is not a number or a range like 1-50': '«{part}» er ikke et tall eller et område som 1-50',
+  '"{part}" must be between 1 and {max}, low to high': '«{part}» må være mellom 1 og {max}, lavest først',
+  'Confirm': 'Bekreft',
+  'Distance (m)': 'Distanse (m)',
+  'Edit': 'Endre',
+  'Lap length (m)': 'Rundelengde (m)',
+  'Name; Class; Bib': 'Navn; Klasse; Startnr',
+  'Missed lap at (time since the start)': 'Glemt runde ved (tid siden start)',
+  'Place': 'Plass',
+  'Set': 'Lagre',
+  'Splits': 'Mellomtider',
+  'Start each class on a new ten (1–17, then 20…)': 'Start hver klasse på en ny tier (1–17, så 20…)',
+  'Timers for {heats}': 'Tidtakere for {heats}',
+  'Timing points (m from the start)': 'Tidspunkter (m fra start)',
+  'class “{c}” not understood': 'klassen «{c}» ble ikke forstått',
+  '{n} will be skipped: bib already used': '{n} hoppes over: startnummeret er allerede brukt',
+  '{n} will be skipped: no bib number': '{n} hoppes over: mangler startnummer',
+
   // ---- words, mostly for plural() ----
   'bib': 'startnummer',
   'bibs': 'startnumre',

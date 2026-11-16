@@ -128,9 +128,9 @@ export default function RunnerSheet({ eventId, heatId, runnerId, onClose, offerU
               )}
               {addingAt ? (
                 <div>
-                  <span className="label">Missed lap at (time since the start)</span>
+                  <span className="label">{t('Missed lap at (time since the start)')}</span>
                   <TimeInput
-                    submitLabel="Add"
+                    submitLabel={t('Add')}
                     onSubmit={(ms) => {
                       const r = addLapAt(heatId, runner.id, heat.startedAt + ms)
                       if (r.error) return r.error

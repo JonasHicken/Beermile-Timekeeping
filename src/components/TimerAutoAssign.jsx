@@ -34,7 +34,7 @@ export default function TimerAutoAssign({ eventId, timers, heats, busy, onApply 
   function apply() {
     const all = heats.flatMap((h) => h.runners)
     const assignment = plan.flatMap((p) => p.split.map((x) => ({ runner_id: x.runner.id, tidtaker: x.timer })))
-    onApply(all, assignment, `Timers for ${plural(heats.length, 'heat')}`)
+    onApply(all, assignment, t('Timers for {heats}', { heats: plural(heats.length, 'heat') }))
   }
 
   if (!heats.length) return null

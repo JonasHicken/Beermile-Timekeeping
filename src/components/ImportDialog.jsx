@@ -161,15 +161,15 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
                   <div className="form-error" style={{ marginBottom: 10 }}>
                     {plan.duplicates.length > 0 && (
                       <div>
-                        {plan.duplicates.length} will be skipped: bib already used
-                        ({[...new Set(plan.duplicates.map((d) => d.bib))].slice(0, 6).join(', ')}
+                        {t('{n} will be skipped: bib already used', { n: plan.duplicates.length })}
+                        {' '}({[...new Set(plan.duplicates.map((d) => d.bib))].slice(0, 6).join(', ')}
                         {plan.duplicates.length > 6 ? '…' : ''}).
                       </div>
                     )}
                     {plan.missingBib.length > 0 && (
                       <div>
-                        {plan.missingBib.length} will be skipped: no bib number
-                        ({plan.missingBib.slice(0, 3).map((r) => r.name || 'unnamed').join(', ')}
+                        {t('{n} will be skipped: no bib number', { n: plan.missingBib.length })}
+                        {' '}({plan.missingBib.slice(0, 3).map((r) => r.name || t('unnamed')).join(', ')}
                         {plan.missingBib.length > 3 ? '…' : ''}).
                       </div>
                     )}

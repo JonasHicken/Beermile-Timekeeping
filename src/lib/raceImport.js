@@ -3,7 +3,9 @@
 // team needs a team name and two runners. Pure, so Race admin can show
 // exactly what will be added and what will be skipped before anything is sent.
 
-const WOMEN = /^(k|kv|kvinne|kvinner|dame|damer|jente|jenter|w|women|woman|female|f|girls?|ladies)$/
+import { t } from './i18n.js'
+
+const WOMEN =/^(k|kv|kvinne|kvinner|dame|damer|jente|jenter|w|women|woman|female|f|girls?|ladies)$/
 const MEN = /^(m|mann|menn|herre|herrer|gutt|gutter|men|man|male|boys?)$/
 const RELAY = /(stafett|relay|lag|team)/
 
@@ -49,7 +51,7 @@ export function toSignups(rows, fallback, existing = []) {
     const name = clean(row.name)
     if (!name) { skipped.push({ row, why: 'no name' }); continue }
     const kind = classOf(row.category) ?? fallback
-    if (!kind) { skipped.push({ row, why: row.category ? `class “${clean(row.category)}” not understood` : 'no class' }); continue }
+    if (!kind) { skipped.push({ row, why: row.category ? t('class “{c}” not understood', { c: clean(row.category) }) : 'no class' }); continue }
 
     let signup
     if (kind === 'stafett') {

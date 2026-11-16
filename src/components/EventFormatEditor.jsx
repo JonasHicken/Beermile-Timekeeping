@@ -61,12 +61,12 @@ export default function EventFormatEditor({ value, onSave, busy, compact = false
         <>
           <div className="row" style={{ gap: 10 }}>
             <label className="stack grow" style={{ gap: 4 }}>
-              <span className="label">Distance (m)</span>
+              <span className="label">{t('Distance (m)')}</span>
               <input type="number" inputMode="numeric" min="1" disabled={busy || draft.mode === 'points'} value={draft.distance}
                 onChange={(e) => change({ ...draft, kind: kindFor(draft.kind, e.target.value), distance: e.target.value })} />
             </label>
             <label className="stack grow" style={{ gap: 4 }}>
-              <span className="label">Lap length (m)</span>
+              <span className="label">{t('Lap length (m)')}</span>
               <input type="number" inputMode="numeric" min="1" disabled={busy || draft.mode !== 'laps'} value={draft.lapLength}
                 onChange={(e) => change({ ...draft, lapLength: e.target.value })} />
             </label>
@@ -83,17 +83,22 @@ export default function EventFormatEditor({ value, onSave, busy, compact = false
               ))}
             </div>
           </div>
-          <label className="stack" style={{ gap: 4 }}>
-            <span className="label">Timing points (m from the start)</span>
-            <input value={pointsText} disabled={busy || draft.mode !== 'points'} onChange={(e) => setPoints(e.target.value)}
-              placeholder="1500, 3000, 5000" inputMode="text" />
-          </label>
+          {/* Only "My own points" is typed by hand; the other modes work the
+              points out, and the line under the form lists them. */}
+          {draft.mode === 'points' && (
+            <label className="stack" style={{ gap: 4 }}>
+              <span className="label">{t('Timing points (m from the start)')}</span>
+              <textarea rows={2} value={pointsText} disabled={busy} onChange={(e) => setPoints(e.target.value)}
+                placeholder="1500, 3000, 5000" style={{ resize: 'vertical' }} />
+            </label>
+          )}
         </>
       )}
 
       {error ? <div className="form-error">{error}</div> : (
         <div className="muted tiny">
-          {describe(draft)}{beermile ? `. ${t('Penalty laps can be added per runner while timing.')}` : `: ${t('a tap at {points} m.', { points: draft.points.join(', ') })}`}
+          {describe(draft)}{beermile ? `. ${t('Penalty laps can be added per runner while timing.')}`
+            : draft.mode === 'points' ? '.' : `: ${t('a tap at {points} m.', { points: draft.points.join(', ') })}`}
         </div>
       )}
 

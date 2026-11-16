@@ -139,7 +139,7 @@ export default function ResultCorrections({ event, finishers, out, askConfirm, o
           <span className="grow" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.runner.name}</span>
           <span className="display" style={{ fontSize: 20 }}>{row.finished ? fmt(row.elapsed) : OUT[row.status] ?? ''}</span>
           <button className="btn ghost sm" onClick={() => { setOpen(editing ? null : row.runner.id); setNote(null) }} aria-expanded={editing}>
-            {editing ? 'Close' : 'Edit'}
+            {editing ? t('Close') : t('Edit')}
           </button>
         </div>
         {editing && <EditForm row={row} onName={(n) => saveName(row, n)} onBib={(b) => saveBib(row, b)} onTime={(ms) => saveTime(row, ms)} />}
@@ -151,7 +151,7 @@ export default function ResultCorrections({ event, finishers, out, askConfirm, o
     <div className="stack" style={{ gap: 14 }}>
       {classesIn(finishers).map((c) => (
         <div key={c}>
-          <div style={{ fontWeight: 700, color: 'var(--amber)', marginBottom: 4 }}>{c || 'No class'}</div>
+          <div style={{ fontWeight: 700, color: 'var(--amber)', marginBottom: 4 }}>{c || t('No class')}</div>
           {finishers.filter((r) => (r.runner.category || '') === c).map((r, i) => rowView(r, i + 1))}
         </div>
       ))}
@@ -189,7 +189,7 @@ function EditForm({ row, onName, onBib, onTime }) {
       {row.finished && (
         <div className="stack" style={{ gap: 4 }}>
           <span className="label">{t('Finishing time')}</span>
-          <TimeInput initialMs={row.elapsed} submitLabel="Save" onSubmit={onTime} />
+          <TimeInput initialMs={row.elapsed} submitLabel={t('Save')} onSubmit={onTime} />
         </div>
       )}
     </div>

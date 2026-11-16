@@ -73,7 +73,7 @@ export default function RaceImport({ runners, busy, onClose, onImport }) {
             </button>
             <div className="or-line"><span>{t('or paste rows')}</span></div>
             <textarea ref={pasteRef} rows={5} value={pasteText} onChange={(e) => setPasteText(e.target.value)}
-              placeholder={'Name; Class; Bib\nOla Nordmann; Menn; 14\nKari Berg; Kvinner; 27\nLag 1 (Per og Pål); Stafett'} />
+              placeholder={t('Name; Class; Bib') + '\nOla Nordmann; Menn; 14\nKari Berg; Kvinner; 27\nLag 1 (Per og Pål); Stafett'} />
             <PhotoScan pasteRef={pasteRef} onText={setPasteText} />
             <button className="btn block" style={{ marginTop: 10 }} onClick={usePaste}>{t('Use pasted rows')}</button>
           </>

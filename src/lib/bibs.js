@@ -5,6 +5,8 @@
 // and optionally where each class starts. Used for events on this phone and,
 // through the admin link, for shared races (pages/RaceAdmin.jsx).
 
+import { t } from './i18n.js'
+
 const MAX = 9999
 
 // "1-50, 60, 100-120" -> { numbers: [1..50, 60, 100..120], error }. Commas,
@@ -18,10 +20,10 @@ export function parseNumbers(text) {
     const part = raw.trim()
     if (!part) continue
     const m = part.match(/^(\d+)\s*(?:[-–]\s*(\d+))?$/)
-    if (!m) return { numbers: [], error: `"${part}" is not a number or a range like 1-50` }
+    if (!m) return { numbers: [], error: t('"{part}" is not a number or a range like 1-50', { part }) }
     const a = Number(m[1])
     const b = m[2] == null ? a : Number(m[2])
-    if (a < 1 || b > MAX || b < a) return { numbers: [], error: `"${part}" must be between 1 and ${MAX}, low to high` }
+    if (a < 1 || b > MAX || b < a) return { numbers: [], error: t('"{part}" must be between 1 and {max}, low to high', { part, max: MAX }) }
     for (let n = a; n <= b; n++) numbers.add(n)
   }
   return { numbers: [...numbers].sort((x, y) => x - y), error: null }
