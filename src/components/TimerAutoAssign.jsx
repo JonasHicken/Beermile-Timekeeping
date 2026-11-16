@@ -18,16 +18,16 @@ export default function TimerAutoAssign({ eventId, timers, heats, busy, onApply 
   const saved = load(eventId)
   const [off, setOff] = useState(() => new Set(saved?.off ?? [])) // timers left out
   const [max, setMax] = useState(saved?.max ?? 8)
-  const chosen = timers.filter((t) => !off.has(t))
+  const chosen = timers.filter((name) => !off.has(name))
   const plan = chosen.length ? planTimers(heats, chosen, max) : []
   const left = plan.reduce((n, p) => n + p.left, 0)
 
   function remember(next) {
     try { localStorage.setItem(KEY(eventId), JSON.stringify({ off: [...(next.off ?? off)], max: next.max ?? max })) } catch { /* not remembered */ }
   }
-  function toggle(t) {
+  function toggle(name) {
     const next = new Set(off)
-    if (next.has(t)) next.delete(t); else next.add(t)
+    if (next.has(name)) next.delete(name); else next.add(name)
     setOff(next); remember({ off: next })
   }
 
@@ -43,8 +43,8 @@ export default function TimerAutoAssign({ eventId, timers, heats, busy, onApply 
       <strong>{t('Give runners to timers automatically')}</strong>
       <div className="muted tiny">{t('Tap the timers who take part. Each heat that has not started is shared between them.')}</div>
       <div className="row wrap" style={{ gap: 6 }}>
-        {timers.map((t) => (
-          <button key={t} type="button" className={`chip${off.has(t) ? '' : ' on'}`} aria-pressed={!off.has(t)} onClick={() => toggle(t)}>{t}</button>
+        {timers.map((name) => (
+          <button key={name} type="button" className={`chip${off.has(name) ? '' : ' on'}`} aria-pressed={!off.has(name)} onClick={() => toggle(name)}>{name}</button>
         ))}
       </div>
       <label className="row" style={{ gap: 8 }}>
@@ -58,7 +58,7 @@ export default function TimerAutoAssign({ eventId, timers, heats, busy, onApply 
       ) : (
         <div className="stack" style={{ gap: 4 }}>
           {plan.map((p, i) => {
-            const counts = chosen.map((t) => [t, p.split.filter((x) => x.timer === t).length]).filter(([, n]) => n)
+            const counts = chosen.map((name) => [name, p.split.filter((x) => x.timer === name).length]).filter(([, n]) => n)
             return (
               <div key={p.id} className="row" style={{ gap: 8, alignItems: 'baseline' }}>
                 <strong style={{ minWidth: 64 }}>{heats[i].name}</strong>

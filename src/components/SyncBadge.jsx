@@ -10,8 +10,8 @@ export default function SyncBadge({ eventId }) {
   const waiting = useStore((s) => pendingCount(s, eventId))
   const [, tick] = useState(0)
   useEffect(() => {
-    const t = setInterval(() => tick((n) => n + 1), 5000)
-    return () => clearInterval(t)
+    const id = setInterval(() => tick((n) => n + 1), 5000)
+    return () => clearInterval(id)
   }, [])
 
   let kind = 'wait'

@@ -54,7 +54,7 @@ export default function RaceAdmin() {
   // Live while one is running, else Setup.
   const [search, setSearch] = useSearchParams()
   const asked = search.get('tab')
-  const tab = TABS.some((t) => t.id === asked) ? asked : (() => {
+  const tab = TABS.some((tb) => tb.id === asked) ? asked : (() => {
     const hs = heatsInEvent(getState(), eventId)
     if (hs.length > 0 && hs.every((h) => h.status === 'done')) return 'results'
     if (hs.some((h) => h.status === 'running')) return 'live'
@@ -206,7 +206,7 @@ export default function RaceAdmin() {
   const askRemove = (r) => askConfirm({
     title: t('Remove {name}?', { name: r.name || `${t('bib')} ${r.bib}` }),
     body: t('Takes them off the start list and the sign-ups. Someone who has run a lap can’t be removed: mark them DNS or DNF instead. You can undo it straight after.'),
-    confirmLabel: 'Remove',
+    confirmLabel: t('Remove'),
     danger: true,
     onConfirm: () => remove(r),
   })
@@ -294,7 +294,7 @@ export default function RaceAdmin() {
           askConfirm({
             title: t('Bib {bib} is taken', { bib: to }),
             body: t('{name} has {to}. Swap, so they get {from}?', { name: e.detail || t('Someone else'), to, from }),
-            confirmLabel: 'Swap',
+            confirmLabel: t('Swap'),
             onConfirm: () => set(true),
           })
         } else say(e.message, true)

@@ -3,7 +3,7 @@ import { formatOf } from '../lib/eventFormat.js'
 import { useEffect, useState } from 'react'
 import {
   useStore, runnerResult, getEvent, getHeat, getRunner,
-  STATUSES, statusOf, penaltyOf,
+  STATUSES, statusOf, penaltyOf, roleOf,
   setRunnerStatus, setPenaltyLaps, setCrossingVoid, recordCrossing, addLapAt,
 } from '../lib/store.js'
 import { fmt, fmtShort } from '../lib/time.js'
@@ -31,6 +31,10 @@ export default function RunnerSheet({ eventId, heatId, runnerId, onClose, offerU
 
   const status = statusOf(runner)
   const penalty = penaltyOf(runner)
+  // A timer at a timing point taps everyone, but a runner's status and penalty
+  // laps belong to the admin and the runner's own timer (the server refuses
+  // anyone else), so they are not offered here.
+  const canChange = roleOf(event) !== 'timer' || (Boolean(runner.timer) && runner.timer === event.online?.me)
 
   return (
     <>
@@ -51,8 +55,10 @@ export default function RunnerSheet({ eventId, heatId, runnerId, onClose, offerU
           <button className="btn ghost" onClick={onClose} aria-label={t('Close')}>✕</button>
         </div>
 
+        {!canChange && <div className="muted tiny" style={{ marginTop: 14 }}>{t('Status and penalty laps are set by the admin or this runner’s own timer.')}</div>}
+
         {/* status */}
-        <div style={{ marginTop: 18 }}>
+        {canChange && <div style={{ marginTop: 18 }}>
           <span className="label">{t('Status')}</span>
           <div className="seg">
             {STATUSES.map((s) => (
@@ -65,10 +71,10 @@ export default function RunnerSheet({ eventId, heatId, runnerId, onClose, offerU
               </button>
             ))}
           </div>
-        </div>
+        </div>}
 
         {/* penalty laps: a beer mile's, not a track race's */}
-        {formatOf(event).penalties && <div style={{ marginTop: 16 }}>
+        {canChange && formatOf(event).penalties && <div style={{ marginTop: 16 }}>
           <span className="label">{t('Penalty laps')}</span>
           <div className="row">
             <button className="btn" onClick={() => setPenaltyLaps(runner.id, penalty - 1)} disabled={penalty === 0}>−</button>

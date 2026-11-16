@@ -21,8 +21,8 @@ export function useUndo() {
 
   useEffect(() => {
     if (!stack.length) return
-    const t = setTimeout(() => setStack([]), UNDO_MS)
-    return () => clearTimeout(t)
+    const id = setTimeout(() => setStack([]), UNDO_MS)
+    return () => clearTimeout(id)
   }, [stack])
 
   const node = top ? (

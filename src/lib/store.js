@@ -457,17 +457,17 @@ export function importRunners(eventId, text) {
   const added = []
   const next = [...state.runners]
   for (const line of text.split('\n')) {
-    const t = line.trim()
-    if (!t) continue
+    const row = line.trim()
+    if (!row) continue
     let bib, name = '', category = ''
-    if (t.includes(',')) {
-      const parts = t.split(',').map((x) => x.trim())
+    if (row.includes(',')) {
+      const parts = row.split(',').map((x) => x.trim())
       bib = parts[0]
       name = parts[1] || ''
       category = parts[2] || ''
     } else {
-      const m = t.match(/^(\S+)\s+(.*)$/)
-      if (m) { bib = m[1]; name = m[2] } else { bib = t }
+      const m = row.match(/^(\S+)\s+(.*)$/)
+      if (m) { bib = m[1]; name = m[2] } else { bib = row }
     }
     if (!bib) continue
     const r = newRunner(eventId, { bib, name, category })

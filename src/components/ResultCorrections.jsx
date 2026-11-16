@@ -60,14 +60,14 @@ export default function ResultCorrections({ event, finishers, out, askConfirm, o
     const set = async (swap) => {
       try {
         await adminCall(event.id, 'tk_admin_sett_startnummer', { p_fra: from, p_til: to, p_bytt: swap })
-        say(`Bib changed${swap ? ' (swapped)' : ''}.`)
-        offerUndo(`Bib ${from} → ${to}`, () => server('tk_admin_sett_startnummer', { p_fra: to, p_til: from, p_bytt: swap }))
+        say(swap ? t('Bib changed (swapped).') : t('Bib changed.'))
+        offerUndo(`${t('Bib')} ${from} → ${to}`, () => server('tk_admin_sett_startnummer', { p_fra: to, p_til: from, p_bytt: swap }))
       } catch (e) {
         if (e.hint === 'opptatt' && !swap) {
           askConfirm({
             title: t('Bib {bib} is taken', { bib: to }),
             body: t('{name} has {to}. Swap, so they get {from}?', { name: e.detail || t('Someone else'), to, from }),
-            confirmLabel: 'Swap',
+            confirmLabel: t('Swap'),
             danger: true,
             onConfirm: () => set(true),
           })

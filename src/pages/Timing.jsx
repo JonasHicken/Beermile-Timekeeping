@@ -150,7 +150,7 @@ export default function Timing() {
   function tap(row) {
     if (picking) { toggleMine(row.runner.id); return }
     if (!running) {
-      if (heat.status === 'done') showToast('Heat finished · Reopen to record laps')
+      if (heat.status === 'done') showToast(t('Heat finished · Reopen to record laps'))
       return
     }
     if (row.out) { showToast(`${row.runner.bib}: ${row.status.toUpperCase()}`); return }
@@ -371,7 +371,7 @@ export default function Timing() {
                     : {
                         title: t('Finish this heat?'),
                         body: t('Everyone is in. Timing stops; you can still review and correct it, or reopen the heat.'),
-                        confirmLabel: 'Finish',
+                        confirmLabel: t('Finish'),
                         onConfirm: () => finishHeat(heatId),
                       })
                 }
@@ -462,8 +462,8 @@ function HeatClock({ startedAt }) {
   // On the server's clock (nowMs), like the start time it is measured from.
   const [now, setNow] = useState(nowMs())
   useEffect(() => {
-    const t = setInterval(() => setNow(nowMs()), 100)
-    return () => clearInterval(t)
+    const id = setInterval(() => setNow(nowMs()), 100)
+    return () => clearInterval(id)
   }, [])
   return <span className="clock" style={{ fontSize: 26 }}>{fmt(now - startedAt)}</span>
 }
