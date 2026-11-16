@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/copy-tesseract.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/copy-tesseract.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "icons": "node scripts/make-icons.mjs",
@@ -13,9 +15,12 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
+    "@tesseract.js-data/eng": "^1.0.0",
+    "@tesseract.js-data/nor": "^1.0.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.0",
+    "tesseract.js": "^7.0.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
   "devDependencies": {

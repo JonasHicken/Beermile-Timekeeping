@@ -1,5 +1,7 @@
 node_modules
 dist
+# Copied from node_modules by scripts/copy-tesseract.mjs before dev and build
+public/tesseract/
 .env
 .env.local
 *.local

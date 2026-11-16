@@ -110,6 +110,17 @@ export default {
   'Timing point for {name}': 'Tidspunkt for {name}',
   'No timer at {points}: only taps from you or a timer’s own runners land there.': 'Ingen tidtaker ved {points}: bare trykk fra deg eller fra en tidtakers egne løpere havner der.',
   'at {point}': 'ved {point}',
+  'Club': 'Klubb',
+  'Category': 'Kategori',
+  'pasted text': 'innlimt tekst',
+  'Scan a list with the camera': 'Skann en liste med kameraet',
+  'Tap the box again and choose Scan Text (or the text-scan icon above the keyboard), then point the camera at the list. Or open the photo in Photos, press and hold the text, Copy, and paste it here.': 'Trykk i boksen igjen og velg Skann tekst (eller tekstskann-ikonet over tastaturet), og pek kameraet mot listen. Eller åpne bildet i Bilder, hold fingeren på teksten, velg Kopier, og lim den inn her.',
+  'No names found in the photo. Try a sharper photo, straight on, with good light.': 'Fant ingen navn i bildet. Prøv et skarpere bilde, tatt rett forfra, i godt lys.',
+  'Read {n} rows. Check them in the box below and correct any mistakes before you use them.': 'Leste {n} rader. Sjekk dem i boksen under og rett eventuelle feil før du bruker dem.',
+  'Could not read the photo: {why}': 'Klarte ikke å lese bildet: {why}',
+  'Reading the photo… {n} %': 'Leser bildet … {n} %',
+  'Take a photo of a list': 'Ta bilde av en liste',
+  'Read on this phone; the photo is not sent anywhere. One runner per line works best.': 'Leses på denne telefonen; bildet sendes ingen steder. Én løper per linje fungerer best.',
 
   // ---- everything else, A–Z ----
   '+ Add a heat': '+ Legg til et heat',

@@ -2,6 +2,7 @@ import { t, plural } from '../lib/i18n.js'
 import { useRef, useState } from 'react'
 import { parseFile, parseDelimited, detectDelimiter, guessMapping, toRunnerRows } from '../lib/parseTable.js'
 import { toSignups, CLASS_NAME } from '../lib/raceImport.js'
+import PhotoScan from './PhotoScan.jsx'
 
 const FIELDS = [
   { key: 'name', label: 'Name', required: true },
@@ -23,6 +24,7 @@ export default function RaceImport({ runners, busy, onClose, onImport }) {
   const [error, setError] = useState('')
   const [reading, setReading] = useState(false)
   const fileRef = useRef(null)
+  const pasteRef = useRef(null)
 
   function ingest(parsed, label) {
     if (!parsed.length) { setError(t('That file had no readable rows.')); return }
@@ -37,9 +39,9 @@ export default function RaceImport({ runners, busy, onClose, onImport }) {
     finally { setReading(false) }
   }
   function usePaste() {
-    const t = pasteText.trim()
-    if (!t) { setError(t('Nothing pasted yet.')); return }
-    ingest(parseDelimited(t, detectDelimiter(t)), 'pasted text')
+    const text = pasteText.trim()
+    if (!text) { setError(t('Nothing pasted yet.')); return }
+    ingest(parseDelimited(text, detectDelimiter(text)), t('pasted text'))
   }
 
   const preview = rows && mapping ? toRunnerRows(rows, mapping, hasHeader) : []
@@ -70,8 +72,9 @@ export default function RaceImport({ runners, busy, onClose, onImport }) {
               {reading ? t('Reading…') : t('Choose file')}
             </button>
             <div className="or-line"><span>{t('or paste rows')}</span></div>
-            <textarea rows={5} value={pasteText} onChange={(e) => setPasteText(e.target.value)}
+            <textarea ref={pasteRef} rows={5} value={pasteText} onChange={(e) => setPasteText(e.target.value)}
               placeholder={'Name; Class; Bib\nOla Nordmann; Menn; 14\nKari Berg; Kvinner; 27\nLag 1 (Per og Pål); Stafett'} />
+            <PhotoScan pasteRef={pasteRef} onText={setPasteText} />
             <button className="btn block" style={{ marginTop: 10 }} onClick={usePaste}>{t('Use pasted rows')}</button>
           </>
         )}
@@ -90,7 +93,7 @@ export default function RaceImport({ runners, busy, onClose, onImport }) {
               {FIELDS.map((f) => (
                 <label key={f.key} className="map-row">
                   <span className="label" style={{ margin: 0 }}>
-                    {f.label}{f.required && <span style={{ color: 'var(--amber)' }}> *</span>}
+                    {t(f.label)}{f.required && <span style={{ color: 'var(--amber)' }}> *</span>}
                   </span>
                   <select value={mapping[f.key]} onChange={(e) => setMapping({ ...mapping, [f.key]: Number(e.target.value) })}>
                     <option value={-1}>{t('— none —')}</option>
@@ -140,7 +143,7 @@ export default function RaceImport({ runners, busy, onClose, onImport }) {
                       <span className="bib">{x.signup.startnummer ?? '—'}</span>
                       <span className="grow">
                         {x.label}
-                        <span className="muted tiny"> · {CLASS_NAME[x.signup.klasse === 'stafett' ? 'stafett' : x.signup.kjonn]}</span>
+                        <span className="muted tiny"> · {t(CLASS_NAME[x.signup.klasse === 'stafett' ? 'stafett' : x.signup.kjonn])}</span>
                       </span>
                     </div>
                   ))}

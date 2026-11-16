@@ -2,6 +2,7 @@ import { t, plural } from '../lib/i18n.js'
 import { useRef, useState } from 'react'
 import { parseFile, parseDelimited, detectDelimiter, guessMapping, toRunnerRows } from '../lib/parseTable.js'
 import { useStore, runnersInEvent, importRunnerRows, classifyImport } from '../lib/store.js'
+import PhotoScan from './PhotoScan.jsx'
 
 const FIELDS = [
   { key: 'bib', label: 'Bib', required: true },
@@ -24,6 +25,7 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const fileRef = useRef(null)
+  const pasteRef = useRef(null)
   const existingBibs = useStore((s) => runnersInEvent(s, eventId).map((r) => r.bib))
 
   function ingest(parsed, label) {
@@ -50,9 +52,9 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
   }
 
   function usePaste() {
-    const t = pasteText.trim()
-    if (!t) { setError(t('Nothing pasted yet.')); return }
-    ingest(parseDelimited(t, detectDelimiter(t)), 'pasted text')
+    const text = pasteText.trim()
+    if (!text) { setError(t('Nothing pasted yet.')); return }
+    ingest(parseDelimited(text, detectDelimiter(text)), t('pasted text'))
   }
 
   const preview = rows && mapping ? toRunnerRows(rows, mapping, hasHeader) : []
@@ -99,11 +101,13 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
             <div className="or-line"><span>{t('or paste rows')}</span></div>
 
             <textarea
+              ref={pasteRef}
               rows={5}
               value={pasteText}
               onChange={(e) => setPasteText(e.target.value)}
               placeholder={'14, Ola Nordmann, OSI\n27, Kari Berg, BUL\n33, Per Hansen'}
             />
+            <PhotoScan pasteRef={pasteRef} onText={setPasteText} />
             <button className="btn block" style={{ marginTop: 10 }} onClick={usePaste}>
               {t('Use pasted rows')}
             </button>
@@ -125,7 +129,7 @@ export default function ImportDialog({ eventId, existingCount, onClose, onDone }
               {FIELDS.map((f) => (
                 <label key={f.key} className="map-row">
                   <span className="label" style={{ margin: 0 }}>
-                    {f.label}{f.required && <span style={{ color: 'var(--amber)' }}> *</span>}
+                    {t(f.label)}{f.required && <span style={{ color: 'var(--amber)' }}> *</span>}
                   </span>
                   <select
                     value={mapping[f.key]}
