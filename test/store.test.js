@@ -503,3 +503,45 @@ describe('assigning bibs in blocks', () => {
     expect(result(ev, heat, a).lapsDone).toBe(1)
   })
 })
+
+describe('timing points', () => {
+  // 5000 m timed at 1500, 3000 and the finish, a timer team at each.
+  const pointsRace = () => {
+    const r = race(['1'], 3)
+    S.updateEvent(r.ev.id, { format: { kind: 'custom', distance: 5000, lapLength: 400, mode: 'points', points: [1500, 3000, 5000], penalties: false }, numLaps: 3 })
+    return r
+  }
+
+  it('puts each tap at its point, so a missed point leaves a gap instead of shifting', () => {
+    const { ev, heat, runners: [r] } = pointsRace()
+    S.recordCrossing(heat.id, r.id, 'tap', sec(600), { point: 1 }) // 3000 m; 1500 m was missed
+    S.recordCrossing(heat.id, r.id, 'tap', sec(1000), { point: 2 })
+    const res = result(ev, heat, r)
+    expect(res.finished).toBe(true)
+    expect(res.elapsed).toBe(1_000_000)
+    expect(res.laps.map((l) => [l.lap, l.split])).toEqual([[2, 600_000], [3, 400_000]])
+  })
+
+  it('takes the points in any order of arrival from the phones', () => {
+    const { ev, heat, runners: [r] } = pointsRace()
+    S.recordCrossing(heat.id, r.id, 'tap', sec(1000), { point: 2 })
+    S.recordCrossing(heat.id, r.id, 'tap', sec(300), { point: 0 })
+    expect(result(ev, heat, r).laps.map((l) => l.lap)).toEqual([1, 3])
+    expect(result(ev, heat, r).finished).toBe(true)
+  })
+
+  it('a second tap at the same point is the same passing', () => {
+    const { ev, heat, runners: [r] } = pointsRace()
+    S.recordCrossing(heat.id, r.id, 'tap', sec(300), { point: 0 })
+    const again = S.recordCrossing(heat.id, r.id, 'tap', sec(320), { point: 0 })
+    expect(again).toMatchObject({ duplicate: true, void: true })
+    expect(result(ev, heat, r).lapsDone).toBe(1)
+  })
+
+  it('a tap without a point fills the empty point that fits its time', () => {
+    const { ev, heat, runners: [r] } = pointsRace()
+    S.recordCrossing(heat.id, r.id, 'tap', sec(600)) // the admin's tap, no point
+    S.recordCrossing(heat.id, r.id, 'tap', sec(1000), { point: 2 })
+    expect(result(ev, heat, r).laps.map((l) => [l.lap, l.at])).toEqual([[1, sec(600)], [3, sec(1000)]])
+  })
+})

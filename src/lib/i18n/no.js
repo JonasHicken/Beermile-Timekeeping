@@ -104,6 +104,13 @@ export default {
   'already in the race': 'allerede med i løpet',
   'name already in the race': 'navnet er allerede med i løpet',
 
+  'Timing points': 'Tidspunkter',
+  'Own runners': 'Egne løpere',
+  'Place a timer at a timing point and they tap every runner passing it, there only. Several timers can share a point. A timer left on “Own runners” times the runners given to them below.': 'Plasser en tidtaker ved et tidspunkt, så trykker de på alle løpere som passerer der, og bare der. Flere tidtakere kan dele et punkt. En tidtaker på «Egne løpere» tar tiden på løperne de får under.',
+  'Timing point for {name}': 'Tidspunkt for {name}',
+  'No timer at {points}: only taps from you or a timer’s own runners land there.': 'Ingen tidtaker ved {points}: bare trykk fra deg eller fra en tidtakers egne løpere havner der.',
+  'at {point}': 'ved {point}',
+
   // ---- everything else, A–Z ----
   '+ Add a heat': '+ Legg til et heat',
   '+ Add a missed lap at a time…': '+ Legg til en glemt runde på et tidspunkt …',

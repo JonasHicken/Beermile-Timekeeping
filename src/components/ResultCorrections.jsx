@@ -87,10 +87,11 @@ export default function ResultCorrections({ event, finishers, out, askConfirm, o
   // runner's lap before it, or the laps would change order.
   function saveTime(row, ms) {
     const need = row.requiredLaps
-    const finish = row.laps[need - 1]
+    const finish = row.laps.find((l) => l.lap === need)
     if (!finish || row.heat?.startedAt == null) return t('This result has no finishing tap to move.')
     const start = row.heat.startedAt
-    const before = need > 1 ? row.laps[need - 2].at - start : 0
+    const prevLap = row.laps.filter((l) => l.lap < need).pop()
+    const before = prevLap ? prevLap.at - start : 0
     if (ms <= before) return t('It has to be after the previous lap ({time}).', { time: fmt(before) })
     // The same time again: nothing to move, but the records list's copy is
     // sent once more (what to do when it could not be updated last time).

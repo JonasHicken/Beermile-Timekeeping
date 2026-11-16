@@ -98,6 +98,7 @@ create table if not exists public.tk_crossings (
   runner_id    uuid not null,
   bib          text,
   lap          integer not null,
+  punkt        integer,                  -- which timing point (from 0); null: counted in time order
   captured_at  timestamptz not null,
   source       text not null default 'tap' check (source in ('tap', 'rfid', 'manual')),
   void         boolean not null default false,
@@ -106,6 +107,7 @@ create table if not exists public.tk_crossings (
   rev          bigint not null default nextval('public.tk_rev_seq'),
   created_at   timestamptz not null default now()
 );
+alter table public.tk_crossings add column if not exists punkt integer;
 create index if not exists tk_crossings_rev on public.tk_crossings (event_id, rev);
 create index if not exists tk_crossings_runner on public.tk_crossings (runner_id);
 
@@ -114,8 +116,13 @@ create table if not exists public.tk_tilgang (
   event_id     uuid primary key references public.tk_events(id) on delete cascade,
   token        text not null default replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', ''),
   admin_token  text not null default replace(gen_random_uuid()::text, '-', '') || replace(gen_random_uuid()::text, '-', ''),
-  tidtakere    jsonb not null default '[]'::jsonb
+  tidtakere    jsonb not null default '[]'::jsonb,
+  -- Timers placed at a timing point: { "name": point index from 0 }. A timer
+  -- at a point taps every runner who passes it; one without times only the
+  -- runners the admin gave them.
+  stasjoner    jsonb not null default '{}'::jsonb
 );
+alter table public.tk_tilgang add column if not exists stasjoner jsonb not null default '{}'::jsonb;
 
 -- Nothing by table, for anyone: only the functions below.
 alter table public.tk_events    enable row level security;
@@ -341,7 +348,7 @@ begin
     'versjon', v_versjon,
     'crossings', coalesce((select jsonb_agg(jsonb_build_object(
         'id', c.id, 'heat_id', c.heat_id, 'runner_id', c.runner_id, 'bib', c.bib, 'lap', c.lap,
-        'captured_at', public.tk_ms(c.captured_at), 'source', c.source, 'void', c.void,
+        'punkt', c.punkt, 'captured_at', public.tk_ms(c.captured_at), 'source', c.source, 'void', c.void,
         'enhet', c.enhet, 'endret_ms', c.endret_ms, 'rev', c.rev) order by c.rev)
       from public.tk_crossings c where c.event_id = p_event and c.rev > coalesce(p_siden, 0)), '[]'::jsonb)
   );
@@ -350,6 +357,10 @@ begin
     -- The names are the timers' codes: the admin's eyes only.
     'tidtakere', case when v_admin then (select t.tidtakere from public.tk_tilgang t where t.event_id = p_event) end,
     'tidtakertoken', case when v_admin then (select t.token from public.tk_tilgang t where t.event_id = p_event) end,
+    -- Timing points: the admin sees where everyone stands, a timer only their own.
+    'stasjoner', case when v_admin then (select t.stasjoner from public.tk_tilgang t where t.event_id = p_event) end,
+    'stasjon', case when v_navn is not null then
+      (select (t.stasjoner ->> v_navn)::int from public.tk_tilgang t where t.event_id = p_event) end,
     'event', (select jsonb_build_object('id', e.id, 'name', e.name, 'date', e.date, 'num_laps', e.num_laps,
                        'oppsett', e.oppsett, 'eksport', case when v_admin then e.eksport end)
                 from public.tk_events e where e.id = p_event),
@@ -378,8 +389,11 @@ create or replace function public.tk_send(
 )
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare
-  v_rolle text := public.tk_rolle(p_event, p_token);
-  v_navn  text := public.tk_tidtakernavn(p_event, p_token, p_tidtaker);
+  v_rolle   text := public.tk_rolle(p_event, p_token);
+  v_navn    text := public.tk_tidtakernavn(p_event, p_token, p_tidtaker);
+  -- The timing point this timer stands at, if the admin placed them at one.
+  v_stasjon int := case when v_navn is not null then
+    (select (t.stasjoner ->> v_navn)::int from public.tk_tilgang t where t.event_id = p_event) end;
 begin
   if jsonb_array_length(coalesce(p_crossings, '[]')) > 500
      or jsonb_array_length(coalesce(p_heats, '[]')) > 50
@@ -388,26 +402,30 @@ begin
   end if;
 
   insert into public.tk_crossings as c
-    (id, event_id, heat_id, runner_id, bib, lap, captured_at, source, void, enhet, endret_ms, rev)
+    (id, event_id, heat_id, runner_id, bib, lap, punkt, captured_at, source, void, enhet, endret_ms, rev)
   select x.id, p_event, x.heat_id, x.runner_id, r.bib, greatest(1, least(x.lap, 49)),
+         case when x.punkt between 0 and 48 then x.punkt end,
          to_timestamp(x.captured_at / 1000.0),
          case when x.source in ('tap', 'rfid', 'manual') then x.source else 'tap' end,
          coalesce(x.void, false), left(p_enhet, 40), x.endret_ms, nextval('public.tk_rev_seq')
     from jsonb_to_recordset(coalesce(p_crossings, '[]')) as x(
-           id uuid, heat_id uuid, runner_id uuid, lap int, captured_at bigint,
+           id uuid, heat_id uuid, runner_id uuid, lap int, punkt int, captured_at bigint,
            source text, void boolean, endret_ms bigint)
     join public.tk_runners r on r.id = x.runner_id and r.event_id = p_event
     join public.tk_heats h on h.id = x.heat_id and h.event_id = p_event
    where x.id is not null and x.captured_at is not null and x.endret_ms is not null
-     and (v_rolle = 'admin' or r.tidtaker = v_navn)
+     -- A timer at a timing point taps everyone passing it, at that point only.
+     and (v_rolle = 'admin' or r.tidtaker = v_navn or (v_stasjon is not null and x.punkt = v_stasjon))
   on conflict (id) do update
      set runner_id = excluded.runner_id, bib = excluded.bib, captured_at = excluded.captured_at,
          source = excluded.source, void = excluded.void, endret_ms = excluded.endret_ms,
          rev = nextval('public.tk_rev_seq')
    where c.event_id = p_event and c.endret_ms < excluded.endret_ms
-     -- A timer changes only laps of their own runners, never another timer's.
+     -- A timer changes only laps of their own runners, or at their own timing
+     -- point, never another timer's.
      and (v_rolle = 'admin'
-          or exists (select 1 from public.tk_runners o where o.id = c.runner_id and o.tidtaker = v_navn));
+          or exists (select 1 from public.tk_runners o where o.id = c.runner_id and o.tidtaker = v_navn)
+          or (v_stasjon is not null and c.punkt = v_stasjon and excluded.punkt = v_stasjon));
 
   if v_rolle = 'admin' then
     update public.tk_heats h
@@ -534,7 +552,10 @@ begin
               from (select left(btrim(e #>> '{}'), 30) as n, i
                       from jsonb_array_elements(p_tidtakere) with ordinality as a(e, i)) s
              where n <> '' order by lower(n), i) d;
-    update public.tk_tilgang set tidtakere = v_navn where event_id = p_event;
+    update public.tk_tilgang t set tidtakere = v_navn,
+           stasjoner = coalesce((select jsonb_object_agg(k, v) from jsonb_each(t.stasjoner) as s(k, v)
+                                  where exists (select 1 from jsonb_array_elements_text(v_navn) n where n = k)), '{}'::jsonb)
+     where event_id = p_event;
     update public.tk_runners r set tidtaker = null
      where r.event_id = p_event and r.tidtaker is not null
        and not exists (select 1 from jsonb_array_elements_text(v_navn) v where v = r.tidtaker);
@@ -549,6 +570,40 @@ begin
 end $$;
 revoke all on function public.tk_admin_tidtakere(uuid, text, jsonb, jsonb) from public;
 grant execute on function public.tk_admin_tidtakere(uuid, text, jsonb, jsonb) to anon, authenticated;
+
+-- Timing points: p_stasjoner { "name": point index from 0, or null to take
+-- them off their point }. Only names on the timer list and points the race
+-- has are kept. Returns the whole map.
+create or replace function public.tk_admin_sett_stasjoner(p_event uuid, p_token text, p_stasjoner jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_navn   jsonb;
+  v_punkter int;
+  v_ny     jsonb;
+begin
+  perform public.tk_krev_admin(p_event, p_token);
+  if jsonb_typeof(p_stasjoner) is distinct from 'object' then
+    raise exception 'ugyldig liste' using hint = 'ugyldig';
+  end if;
+  select tidtakere into v_navn from public.tk_tilgang where event_id = p_event;
+  select coalesce(jsonb_array_length(e.oppsett -> 'points'), e.num_laps) into v_punkter
+    from public.tk_events e where e.id = p_event;
+  -- The old map with the given names replaced (null takes a name off).
+  select coalesce(jsonb_object_agg(m.k, m.v), '{}'::jsonb) into v_ny
+    from (select s.k, s.v from public.tk_tilgang t, jsonb_each(t.stasjoner) as s(k, v)
+           where t.event_id = p_event and not p_stasjoner ? s.k
+          union all
+          select s.k, s.v from jsonb_each(p_stasjoner) as s(k, v)
+           where jsonb_typeof(s.v) = 'number') m;
+  select coalesce(jsonb_object_agg(k, v), '{}'::jsonb) into v_ny
+    from jsonb_each(v_ny) as s(k, v)
+   where exists (select 1 from jsonb_array_elements_text(v_navn) n where n = k)
+     and (v #>> '{}') ~ '^[0-9]+$' and (v #>> '{}')::int < v_punkter;
+  update public.tk_tilgang set stasjoner = v_ny where event_id = p_event;
+  return v_ny;
+end $$;
+revoke all on function public.tk_admin_sett_stasjoner(uuid, text, jsonb) from public;
+grant execute on function public.tk_admin_sett_stasjoner(uuid, text, jsonb) to anon, authenticated;
 
 -- Heats: [{runner_id, heat}] with heat a number from 1, or null for none.
 -- Heats are made as "Heat 1", "Heat 2"... as needed and empty ones that have
@@ -848,7 +903,7 @@ begin
         'id', h.id, 'name', h.name, 'order', h."order", 'status', h.status, 'started_at', public.tk_ms(h.started_at)))
       from public.tk_heats h where h.event_id = p_event), '[]'::jsonb),
     'crossings', coalesce((select jsonb_agg(jsonb_build_object(
-        'heat_id', c.heat_id, 'runner_id', c.runner_id, 'captured_at', public.tk_ms(c.captured_at))
+        'heat_id', c.heat_id, 'runner_id', c.runner_id, 'punkt', c.punkt, 'captured_at', public.tk_ms(c.captured_at))
         order by c.captured_at)
       from public.tk_crossings c where c.event_id = p_event and not c.void), '[]'::jsonb)
   );

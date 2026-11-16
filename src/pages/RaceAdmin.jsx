@@ -12,7 +12,7 @@ import SyncBadge from '../components/SyncBadge.jsx'
 import RaceResults from '../components/RaceResults.jsx'
 import TimerAutoAssign from '../components/TimerAutoAssign.jsx'
 import RaceImport from '../components/RaceImport.jsx'
-import { formatOf, describe, formatChangeWarning } from '../lib/eventFormat.js'
+import { formatOf, describe, formatChangeWarning, splitLabel } from '../lib/eventFormat.js'
 import RaceDetails from '../components/RaceDetails.jsx'
 
 // Race day for a shared race, on the admin link: late runners, heats, bibs and
@@ -488,6 +488,9 @@ export default function RaceAdmin() {
       {tab === 'timers' && <>
         <h2 className="admin-h">{t('Timers')}</h2>
         <TimerAssign event={event} runners={runners} offerUndo={offerUndo} />
+        {formatOf(event).mode === 'points' && formatOf(event).points.length > 1 && timerNames.length > 0 && (
+          <TimerStations event={event} names={timerNames} busy={busy} call={call} undoable={undoable} />
+        )}
         {timerNames.length > 0 && (
           <TimerAutoAssign eventId={eventId} timers={timerNames} busy={busy} onApply={giveTimer}
             heats={openHeats.map((h) => ({ id: h.id, name: h.name, runners: runners.filter((r) => r.heatId === h.id) })).filter((h) => h.runners.length)} />
@@ -664,5 +667,44 @@ function AddRunner({ busy, openHeats, countIn, newNr, suggestFor, onAdd, takenBi
       </select>
       <button className="btn primary" type="submit" disabled={!ready || busy}>{t('Add')}</button>
     </form>
+  )
+}
+
+// Timer teams at timing points, for a course timed at points of its own
+// (5000 m with teams at 1500, 3000 and the finish). A timer placed at a point
+// taps every runner passing it; one left on "Own runners" times the runners
+// given to them below. Saved at once, with Undo.
+function TimerStations({ event, names, busy, call, undoable }) {
+  const format = formatOf(event)
+  const map = event.online.stations ?? {}
+  const label = (p) => (p == null ? t('Own runners') : splitLabel(format, p))
+  async function set(name, value) {
+    const was = map[name] ?? null
+    const to = value === '' ? null : Number(value)
+    const res = await call('tk_admin_sett_stasjoner', { p_stasjoner: { [name]: to } })
+    if (res === undefined) return
+    undoable(`${name}: ${label(to)}`, () => call('tk_admin_sett_stasjoner', { p_stasjoner: { [name]: was } }))
+  }
+  const unplaced = format.points.map((_, i) => i).filter((i) => !Object.values(map).includes(i))
+  return (
+    <>
+      <h2 className="admin-h">{t('Timing points')}</h2>
+      <div className="card stack" style={{ gap: 8 }}>
+        <div className="muted tiny">{t('Place a timer at a timing point and they tap every runner passing it, there only. Several timers can share a point. A timer left on “Own runners” times the runners given to them below.')}</div>
+        {names.map((n) => (
+          <div key={n} className="admin-row row" style={{ gap: 8 }}>
+            <span className="grow" style={{ fontWeight: 700, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>{n}</span>
+            <select value={map[n] ?? ''} disabled={busy} onChange={(e) => set(n, e.target.value)}
+              aria-label={t('Timing point for {name}', { name: n })} style={{ flex: '0 0 150px' }}>
+              <option value="">{t('Own runners')}</option>
+              {format.points.map((m, i) => <option key={i} value={i}>{splitLabel(format, i)}</option>)}
+            </select>
+          </div>
+        ))}
+        {Object.keys(map).length > 0 && unplaced.length > 0 && (
+          <div className="muted tiny">{t('No timer at {points}: only taps from you or a timer’s own runners land there.', { points: unplaced.map((i) => splitLabel(format, i)).join(', ') })}</div>
+        )}
+      </div>
+    </>
   )
 }

@@ -4,8 +4,9 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import {
   useStore, getEvent, getHeat, runnersInHeat, crossingsInHeat, heatsInEvent,
   startHeat, finishHeat, reopenHeat, resetHeat, undoReset, recordCrossing, undoLastCrossing,
-  acceptRejectedTap, requiredLaps, statusOf, roleOf, canTime, timerHeat,
+  acceptRejectedTap, requiredLaps, statusOf, roleOf, canTime, timerHeat, progressOf, stationOf,
 } from '../lib/store.js'
+import { formatOf, splitLabel } from '../lib/eventFormat.js'
 import { fmt, nowMs } from '../lib/time.js'
 import { useUndo } from '../components/Undo.jsx'
 import { useOnlineSync, useSyncStatus } from '../lib/online.js'
@@ -45,6 +46,10 @@ export default function Timing() {
   const role = roleOf(event)
   const timer = role === 'timer' && Boolean(event?.online?.role)
   const isAdmin = !timer
+  // A timer placed at a timing point taps every runner passing it, and only
+  // there: their tile is done once the runner has passed their point.
+  const station = timer ? stationOf(event) : null
+  const stationName = station != null ? splitLabel(formatOf(event), station) : null
   // Where a timer belongs. They are moved on by themselves once this heat is
   // done (or the admin moved all their runners elsewhere), so nobody has to
   // find their way around the app at the start line.
@@ -105,20 +110,23 @@ export default function Timing() {
     )
   }
 
-  const counts = {}
-  for (const c of crossings) counts[c.runnerId] = (counts[c.runnerId] || 0) + 1
+  const byRunner = {}
+  for (const c of crossings) (byRunner[c.runnerId] ??= []).push(c)
 
   const rows = runners.filter((r) => !timer || canTime(event, r)).map((r) => {
     const need = requiredLaps(event, r)
-    const done = counts[r.id] || 0
+    const { slots, done, finish } = progressOf(byRunner[r.id] ?? [], need)
     const st = statusOf(r)
+    const passed = station != null && Boolean(slots[station])
     return {
       runner: r,
       need,
       done,
       status: st,
-      finished: st === 'ok' && done >= need,
+      finished: st === 'ok' && (Boolean(finish) || passed),
       out: st !== 'ok',
+      finishAt: finish?.capturedAt ?? null,
+      passedAt: passed ? slots[station].capturedAt : null,
     }
   })
   const finishedCount = rows.filter((x) => x.finished).length
@@ -146,7 +154,7 @@ export default function Timing() {
       return
     }
     if (row.out) { showToast(`${row.runner.bib}: ${row.status.toUpperCase()}`); return }
-    const c = recordCrossing(heatId, row.runner.id, 'tap')
+    const c = recordCrossing(heatId, row.runner.id, 'tap', undefined, { point: station })
     if (!c) return
     const bib = row.runner.bib
     // Another timer already has this crossing. That is the overlap working,
@@ -185,6 +193,7 @@ export default function Timing() {
     setFlashId(row.runner.id)
     setTimeout(() => setFlashId((id) => (id === row.runner.id ? null : id)), 220)
     if (navigator.vibrate) navigator.vibrate(15)
+    if (station != null) { showToast(`${row.runner.bib} · ${stationName}`); return }
     const nowDone = row.done + 1
     showToast(nowDone >= row.need ? `${row.runner.bib} ${t('FINISHED')}` : `${row.runner.bib} · ${t('lap')} ${nowDone}`)
   }
@@ -201,7 +210,10 @@ export default function Timing() {
     <div className="app timing">
       <div className="topbar">
         {timer
-          ? <span className="muted tiny">{event.online.me ? t('Timing as {name}', { name: event.online.me }) : t('Timer')}</span>
+          ? <span className="muted tiny">
+              {event.online.me ? t('Timing as {name}', { name: event.online.me }) : t('Timer')}
+              {stationName && ` · ${t('at {point}', { point: stationName })}`}
+            </span>
           : roleOf(event) === 'admin'
             ? <Link to={`/event/${eventId}/admin?tab=live`} className="backlink">{t('← Race admin')}</Link>
             : <Link to={`/event/${eventId}/setup`} className="backlink">{t('← Setup')}</Link>}
@@ -323,7 +335,7 @@ export default function Timing() {
                 flash={flashId === row.runner.id}
                 picking={picking}
                 isMine={mine.has(row.runner.id)}
-                elapsed={row.finished ? finishElapsed(crossings, row.runner.id, row.need, heat.startedAt) : null}
+                elapsed={heat.startedAt == null ? null : (row.passedAt ?? row.finishAt) == null ? null : (row.passedAt ?? row.finishAt) - heat.startedAt}
                 disabled={!running && !picking}
                 onTap={() => tap(row)}
                 onDetail={() => setSheetRunner(row.runner.id)}
@@ -445,12 +457,6 @@ function TimerSummary({ runners, names }) {
 }
 
 const secs = (ms) => `${Math.max(0, Math.round(ms / 1000))} s`
-
-function finishElapsed(crossings, runnerId, need, startedAt) {
-  const cs = crossings.filter((c) => c.runnerId === runnerId).sort((a, b) => a.capturedAt - b.capturedAt)
-  if (cs.length < need || startedAt == null) return null
-  return cs[need - 1].capturedAt - startedAt
-}
 
 function HeatClock({ startedAt }) {
   // On the server's clock (nowMs), like the start time it is measured from.

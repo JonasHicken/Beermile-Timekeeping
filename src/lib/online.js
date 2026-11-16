@@ -78,7 +78,7 @@ async function rpc(name, args) {
 }
 
 const toServerCrossing = (c) => ({
-  id: c.id, heat_id: c.heatId, runner_id: c.runnerId, lap: c.lap,
+  id: c.id, heat_id: c.heatId, runner_id: c.runnerId, lap: c.lap, punkt: c.point ?? null,
   captured_at: Math.round(c.capturedAt), source: c.source, void: !!c.void, endret_ms: c.endretMs ?? 0,
 })
 const toServerHeat = (h) => ({

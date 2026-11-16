@@ -119,9 +119,13 @@ export const isOnline = (s, eventId) => Boolean(getEvent(s, eventId)?.online)
 export const roleOf = (event) => (!event?.online ? 'local' : event.online.role === 'admin' ? 'admin' : 'timer')
 
 // Whether this phone may record laps for a runner: always on its own events
-// and for the admin; a timer only for the runners the admin gave them.
+// and for the admin; a timer at a timing point for everyone passing it; any
+// other timer only for the runners the admin gave them.
 export const canTime = (event, runner) =>
-  roleOf(event) !== 'timer' || (Boolean(runner.timer) && runner.timer === event.online.me)
+  roleOf(event) !== 'timer' || stationOf(event) != null || (Boolean(runner.timer) && runner.timer === event.online.me)
+
+// The timing point (index from 0) this phone's timer stands at, or null.
+export const stationOf = (event) => (roleOf(event) === 'timer' ? event.online.station ?? null : null)
 
 // The heat a timer belongs on: of the heats with their runners, the one
 // running, else the next that has not started, else the last one. Null when
@@ -231,6 +235,38 @@ export function dedupeCrossings(sorted) {
   })
 }
 
+// A runner's laps in course order, one slot per timing point: slots[i] is
+// the crossing at point i, or empty. A tap made at a timing point (point set)
+// goes to that point, so a missed tap at 1500 m leaves 1500 m empty instead
+// of moving 3000 m into its place. Taps without a point (one phone, or the
+// admin) fill the empty slots in time order. `cs` is in time order.
+export function slotCrossings(cs) {
+  if (!cs.some((c) => c.point != null)) return [...cs]
+  const slots = []
+  for (const c of cs) if (c.point != null && slots[c.point] == null) slots[c.point] = c
+  for (const c of cs) {
+    if (c.point != null) continue
+    // The first empty slot that keeps the slots in time order.
+    let before = null
+    for (let i = 0; i <= slots.length; i++) {
+      if (slots[i]) { before = slots[i]; continue }
+      const after = slots.slice(i + 1).find(Boolean)
+      if ((!before || before.capturedAt < c.capturedAt) && (!after || after.capturedAt > c.capturedAt)) {
+        slots[i] = c
+        break
+      }
+    }
+  }
+  return slots
+}
+
+// How far a runner has got: points passed (the furthest one counts) and the
+// finishing crossing once the `need`th point has one.
+export function progressOf(cs, need) {
+  const slots = slotCrossings(cs)
+  return { slots, done: slots.length, finish: slots[need - 1] ?? null }
+}
+
 export const crossingsInHeat = (s, heatId) =>
   dedupeCrossings(
     s.crossings
@@ -259,22 +295,26 @@ function bibNum(b) {
 export function runnerResult(s, event, heat, runner) {
   const cs = crossingsForRunner(s, heat.id, runner.id)
   const need = requiredLaps(event, runner)
+  const { slots, done, finish } = progressOf(cs, need)
+  // `lap` is the timing point (from 1); a point nobody tapped is left out, and
+  // the next split runs from the point before it.
   const laps = []
   let prev = heat.startedAt
-  for (const c of cs) {
-    if (prev != null) laps.push({ id: c.id, lap: laps.length + 1, at: c.capturedAt, split: c.capturedAt - prev })
+  slots.forEach((c, i) => {
+    if (!c) return
+    if (prev != null) laps.push({ id: c.id, lap: i + 1, at: c.capturedAt, split: c.capturedAt - prev })
     prev = c.capturedAt
-  }
+  })
   const status = statusOf(runner)
-  const finished = status === 'ok' && cs.length >= need
-  const finishAt = finished ? cs[need - 1].capturedAt : null
+  const finished = status === 'ok' && Boolean(finish)
+  const finishAt = finished ? finish.capturedAt : null
   const elapsed = finished && heat.startedAt != null ? finishAt - heat.startedAt : null
   return {
     runner,
     heat,
     status,
     requiredLaps: need,
-    lapsDone: cs.length,
+    lapsDone: done,
     laps,
     finished,
     finishAt,
@@ -628,24 +668,34 @@ export function undoReset(info) {
 // A 'duplicate' or 'finished' row points at the lap it collided with (dupOf),
 // which acceptRejectedTap voids in exchange.
 // `force` skips the too-soon check (the timer confirmed it, or a manual add).
-export function recordCrossing(heatId, runnerId, source = 'tap', at = nowMs(), { force = false } = {}) {
+export function recordCrossing(heatId, runnerId, source = 'tap', at = nowMs(), { force = false, point = null } = {}) {
   const heat = state.heats.find((h) => h.id === heatId)
   const event = state.events.find((e) => e.id === heat?.eventId)
   const runner = state.runners.find((r) => r.id === runnerId)
   const kept = crossingsForRunner(state, heatId, runnerId)
   const done = kept.length
-  const prev = kept[kept.length - 1]
-  const since = prev ? at - prev.capturedAt : heat?.startedAt != null ? at - heat.startedAt : null
-  const finished = Boolean(event) && done >= requiredLaps(event, runner)
-
-  const otherPhone = Boolean(prev?.enhet) && prev.enhet !== DEVICE_ID
+  let prev = kept[kept.length - 1]
+  let since = prev ? at - prev.capturedAt : heat?.startedAt != null ? at - heat.startedAt : null
+  const finished = point == null && Boolean(event) && progressOf(kept, requiredLaps(event, runner)).finish != null
 
   let rejected = null
-  if (prev && otherPhone && since < MIN_LAP_MS) rejected = 'other-timer'
-  else if (finished) rejected = prev ? 'finished' : null
-  else if (prev && since < DUPLICATE_MS) rejected = 'duplicate'
-  else if (!force && since != null && since < MIN_LAP_MS) rejected = 'too-soon'
-  if (finished && !rejected) return null
+  if (point != null) {
+    // At a timing point the question is only whether this point already has
+    // the runner: then it is the same passing, tapped twice.
+    const here = kept.find((c) => c.point === point)
+    if (here) {
+      prev = here
+      since = at - here.capturedAt
+      rejected = here.enhet && here.enhet !== DEVICE_ID ? 'other-timer' : 'duplicate'
+    }
+  } else {
+    const otherPhone = Boolean(prev?.enhet) && prev.enhet !== DEVICE_ID
+    if (prev && otherPhone && since < MIN_LAP_MS) rejected = 'other-timer'
+    else if (finished) rejected = prev ? 'finished' : null
+    else if (prev && since < DUPLICATE_MS) rejected = 'duplicate'
+    else if (!force && since != null && since < MIN_LAP_MS) rejected = 'too-soon'
+    if (finished && !rejected) return null
+  }
 
   const c = {
     id: uid(),
@@ -653,7 +703,8 @@ export function recordCrossing(heatId, runnerId, source = 'tap', at = nowMs(), {
     heatId,
     runnerId,
     bib: runner?.bib ?? null,
-    lap: finished ? done : done + 1,
+    lap: point != null ? point + 1 : finished ? done : done + 1,
+    point,
     capturedAt: at,
     source, // 'tap' | 'rfid' | 'manual'
     rssi: null, // reserved for RFID
@@ -820,7 +871,7 @@ const fromServerHeat = (eventId, h) => ({
 })
 const fromServerCrossing = (eventId, c) => ({
   id: c.id, eventId, heatId: c.heat_id, runnerId: c.runner_id, bib: c.bib ?? null,
-  lap: c.lap, capturedAt: c.captured_at, source: c.source || 'tap', rssi: null,
+  lap: c.lap, point: c.punkt ?? null, capturedAt: c.captured_at, source: c.source || 'tap', rssi: null,
   void: !!c.void, enhet: c.enhet ?? null, endretMs: c.endret_ms ?? 0,
 })
 
@@ -831,6 +882,9 @@ function onlineFields(data) {
   if (data.rolle) f.role = data.rolle
   if (data.rolle === 'timer' && data.meg) f.me = data.meg
   if (Array.isArray(data.tidtakere)) f.timers = data.tidtakere
+  // Timing points: the admin gets everyone's, a timer their own (or null).
+  if (data.stasjoner && typeof data.stasjoner === 'object') f.stations = data.stasjoner
+  if (data.rolle === 'timer' && 'stasjon' in data) f.station = data.stasjon ?? null
   // The names are the timers' codes. A phone that joined as a timer before
   // they were codes may still hold the list: a timer link never keeps it.
   if (data.rolle === 'timer') f.timers = []
